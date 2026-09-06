@@ -1,0 +1,42 @@
+__pycache__/
+*.pyc
+src/*.o
+src/*.so
+src/*.dll
+src/*.dylib
+src/symbols.rds
+.DS_Store
+config/benchmark.env
+validation/**/library/
+validation/**/source/
+validation/**/fastPLS.Rcheck/
+validation/**/fastPLS.BiocCheck/
+validation/check_dependencies_*/
+validation/**/*.tar.gz
+validation/**/*.o
+validation/**/*.so
+validation/**/*.dylib
+validation/**/*.dll
+validation/**/00LOCK*/
+
+# Validation runs, rendered manuscripts, tables, and figures are evidence, not
+# source. Keep them in the local results archive until the package is frozen.
+validation/
+manuscript/
+
+# Generated benchmark evidence is kept local until a frozen result release is
+# deposited in a separate repository.
+benchmark_results*/
+publication_results*/
+results*/
+output*/
+artifacts*/
+local_results*/
+benchmark/**/results*/
+benchmark/**/output*/
+*.Rcheck/
+*.BiocCheck/
+*.tar.gz
+*.log
+*.out
+*.time

@@ -1,0 +1,19 @@
+category,workflow,primary_runner,summary_or_plotter,generated_evidence
+selection,training-only component selection,run_current_component_selection.R,plot_component_selection_current.R,component paths and selected-component manifest
+component_path,real-dataset component paths,run_current_component_path.R,plot_combined_component_paths.R,metric runtime and memory by component
+backend,paired CPU CUDA Metal,metal_validation/run_matched_cuda_dataset_metal.R,plot_backend_runtime_current.R,paired runtime memory metric and prediction agreement
+precision,float32 versus float64,benchmark_float32_backend_agreement.R,summarize_precision_memory_comparison.R,paired precision diagnostics
+external,independent R packages,benchmark_pls_package_comparison.R,plot_pls_package_comparison_current.R,workflow runtime memory and predictive metric
+external,IKPLS cross-language comparison,ikpls_cross_language/run_benchmark.py,ikpls_cross_language/summarize_large_float32.py,precision-matched runtime memory and predictions
+validation,SIMPLS estimator preservation,benchmark_simpls_estimator_preservation.R,plot_simpls_estimator_preservation.R,coefficient prediction and subspace agreement
+validation,exact-reference SIMPLS,benchmark_simpls_exact_reference.R,,orthogonality deflation and prediction diagnostics
+validation,OPLS and kernel reliability,benchmark_opls_kernel_setting_reliability.R,,setting-level endpoint and component-selection agreement
+validation,rSVD controlled scaling,controlled_scaling/generate_grid.R,controlled_scaling/summarize.R,multi-seed qualification by matrix shape
+ablation,SIMPLS execution ablation,benchmark_simpls_multidataset_ablation.R,summarize_simpls_multidataset_ablation.R,runtime and memory contribution by optimization
+ablation,IKPLS-input phase profile,optimization/profile_ikpls_input.R,,cross-covariance direction update assembly and prediction time
+cross_validation,compiled versus R fold loop,benchmark_cv_compiled_vs_r_loop.R,,matched folds predictions runtime and memory
+multicore,one two and four CPU threads,multicore_scaling/run.sh,multicore_scaling/summarize.R,verified thread scaling and prediction agreement
+nmr,NMR component selection and evaluation,benchmark_nmr_qualified_solver.R,summarize_nmr_qualified_solver.R,RMSD Q2 runtime memory and spectrum predictions
+imagenet,ImageNet classification and retrieval,benchmark_imagenet_current_fused_lda.R,plot_imagenet_current.R,exploratory accuracy top-5 runtime and memory
+rendering,current figures and tables,,../tools/build_current_09939_figures.R,publication-ready figures and compact source tables
+rendering,current manuscript and supplement,,../tools/build_current_09939_documents.py,DOCX manuscript and supplementary material

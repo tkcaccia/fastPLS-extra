@@ -1,0 +1,8 @@
+useDynLib(fastPLSextra, .registration=TRUE)
+importFrom(Rcpp, evalCpp)
+import(Matrix)
+importFrom(stats, predict)
+export(irlba)
+export(irlba_crossprod)
+export(pls_irlba)
+S3method(predict, fastPLSextra)

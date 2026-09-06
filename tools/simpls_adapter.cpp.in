@@ -1,0 +1,94 @@
+List pls_model2_fast_impl(
+  const arma::mat& Xinput,
+  const arma::mat& Yinput,
+  arma::ivec ncomp,
+  int scaling,
+  bool fit,
+  int svd_method,
+  int rsvd_oversample,
+  int rsvd_power,
+  double svds_tol,
+  int seed,
+  arma::mat* owned_X = nullptr
+) {
+  using Clock = std::chrono::steady_clock;
+  const auto started = Clock::now();
+  fastpls::native::SimplsOptions controls;
+  controls.scaling = scaling;
+  controls.fitted = fit;
+  controls.svd.oversample = rsvd_oversample;
+  controls.svd.power = rsvd_power;
+  controls.svd.seed = static_cast<unsigned int>(seed);
+  controls.phase_timing = env_int_or("FASTPLS_BENCH_PHASE_TIMING", 0, 0, 1) == 1;
+  controls.center_scores = env_int_or("FASTPLS_FAST_CENTER_T", 0, 0, 1);
+  controls.reorthogonalize = env_int_or("FASTPLS_FAST_REORTH_V", 0, 0, 1);
+  controls.cache_deflation = env_int_or("FASTPLS_FAST_DEFLCACHE", 1, 0, 1);
+  controls.cache_crossprod = env_int_or("FASTPLS_FAST_OPTIMIZED", 1, 0, 1);
+  controls.incremental_coefficients = env_int_or("FASTPLS_INCREMENTAL_COEFFICIENTS", 1, 0, 1);
+  controls.crossprod_min_components = env_int_or("FASTPLS_FAST_CROSSPROD_MIN_NCOMP", 20, 1, 1024);
+#ifdef FASTPLS_USE_ACCELERATE
+  constexpr int max_predictors = 2048;
+#else
+  constexpr int max_predictors = 512;
+#endif
+  controls.crossprod_max_predictors = env_int_or("FASTPLS_FAST_CROSSPROD_MAX_P", max_predictors, 16, 65536);
+  controls.crossprod_min_ratio = env_int_or("FASTPLS_FAST_CROSSPROD_MIN_N_TO_P_RATIO", 8, 1, 1024);
+  controls.store_scores = env_int_or("FASTPLS_RETURN_TTRAIN", 0, 0, 1) == 1;
+  controls.store_coefficients = should_store_coefficients(
+    Xinput.n_cols, Yinput.n_cols, ncomp.n_elem, true
+  );
+  controls.randomized_directions =
+    svd_method == fastpls_svd::SVD_METHOD_CPU_RSVD ||
+    svd_method == fastpls_svd::SVD_METHOD_CUDA_RSVD;
+
+  fastpls::native::DirectionWorkspace<double> refresh;
+  refresh.eigen_threshold = env_int_or("FASTPLS_GPU_FINALIZE_THRESHOLD", 4, 1, 256);
+  fastpls_svd::IrlbaWorkspace irlba;
+  auto solver = [&](const arma::mat& S, const arma::mat& gram, bool use_gram,
+                    int width, unsigned int direction_seed, arma::mat& directions) {
+    if (controls.randomized_directions) {
+      return use_gram ? refresh.refresh_from_right_gram(
+        S, gram, width, rsvd_oversample, std::max(rsvd_power, 0), direction_seed, directions
+      ) : refresh.refresh(
+        S, width, rsvd_oversample, std::max(rsvd_power, 0), direction_seed, directions
+      );
+    }
+    auto decomposition = compute_truncated_svd_dispatch(S, 1, svd_method,
+      rsvd_oversample, rsvd_power, svds_tol, direction_seed, true, false, &irlba);
+    directions = std::move(decomposition.U);
+    return directions.n_cols > 0;
+  };
+  auto model = fastpls::native::fit_simpls_with_solver(
+    Xinput, Yinput, std::move(ncomp), controls, solver, owned_X
+  );
+  const auto assembly_started = controls.phase_timing ? Clock::now() : Clock::time_point();
+  List out = List::create(
+    Named("P") = arma::mat(), Named("Q") = model.Q,
+    Named("Ttrain") = model.scores, Named("R") = model.R,
+    Named("mX") = model.x_mean, Named("vX") = model.x_scale,
+    Named("mY") = model.y_mean, Named("p") = static_cast<int>(Xinput.n_cols),
+    Named("m") = static_cast<int>(Yinput.n_cols), Named("ncomp") = model.components,
+    Named("Yfit") = model.fitted, Named("R2Y") = model.r2
+  );
+  if (controls.store_coefficients) out["B"] = model.coefficients;
+  annotate_coefficient_storage(out, controls.store_coefficients);
+  if (controls.phase_timing) {
+    const double assembly = std::chrono::duration<double>(Clock::now() - assembly_started).count();
+    const double total = std::chrono::duration<double>(Clock::now() - started).count();
+    const auto& t = model.timing;
+    out["benchmark_phase_timing"] = List::create(
+      Named("preprocess_crosscov_sec") = t.preprocess,
+      Named("response_crosscov_sec") = t.response_crosscov,
+      Named("crossprod_cache_sec") = t.crossprod_cache,
+      Named("right_gram_sec") = t.right_gram,
+      Named("estimator_sec") = t.estimator,
+      Named("direction_sec") = t.direction,
+      Named("component_update_sec") = t.component_update,
+      Named("coefficient_path_sec") = t.coefficients,
+      Named("fitted_values_sec") = t.fitted,
+      Named("model_assembly_sec") = assembly,
+      Named("cpp_total_sec") = total
+    );
+  }
+  return out;
+}

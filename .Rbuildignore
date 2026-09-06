@@ -1,0 +1,10 @@
+^validation$
+^migration$
+^archive$
+^tools$
+^MIGRATION[.]md$
+^COPYING$
+^tests/.*[.]py$
+^tests/__pycache__$
+^[.]git$
+^[.]gitignore$

@@ -1,0 +1,18 @@
+Package: fastPLSextra
+Type: Package
+Title: Iterative Solver Companion for fastPLS
+Version: 0.0.1
+Authors@R: person("Stefano", "Cacciatore", role = c("aut", "cre"),
+    email = "tkcaccia@gmail.com")
+Description: GPL-licensed iterative singular value decomposition and partial
+    least squares comparison tools. The PLS engines are shared with fastPLS
+    through its native headers rather than copied. This development companion
+    provides CPU double-precision IRLBA integration.
+License: GPL-3
+Encoding: UTF-8
+Depends: R (>= 4.6.0)
+Imports: Rcpp, Matrix, stats
+LinkingTo: Rcpp, RcppArmadillo, Matrix, fastPLS (>= 0.99.39)
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3
+NeedsCompilation: yes

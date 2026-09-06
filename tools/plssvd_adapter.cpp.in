@@ -1,0 +1,42 @@
+List pls_model1(
+  arma::mat Xtrain,
+  arma::mat Ytrain,
+  arma::ivec ncomp,
+  int scaling,
+  bool fit,
+  int svd_method,
+  int rsvd_oversample,
+  int rsvd_power,
+  double svds_tol,
+  int seed
+) {
+  const int p = Xtrain.n_cols, m = Ytrain.n_cols;
+  fastpls::native::PlssvdOptions controls;
+  controls.scaling = scaling;
+  controls.fitted = fit;
+  controls.store_coefficients = should_store_coefficients(p, m, ncomp.n_elem, true);
+  controls.cache_score_gram = env_int_or("FASTPLS_PLSSVD_OPTIMIZED", 1, 0, 1);
+  auto solver = [&](const arma::mat& S, int retained, int rank_bound) {
+    auto result = compute_truncated_svd_dispatch(S, retained, svd_method,
+      rsvd_oversample, rsvd_power, svds_tol, static_cast<unsigned int>(seed),
+      false, plssvd_use_small_exact_svd(rank_bound, svd_method));
+    return fastpls::native::SingularTriplets<double>{
+      std::move(result.U), std::move(result.s), std::move(result.Vt)
+    };
+  };
+  auto model = fastpls::native::fit_plssvd_with_solver(
+    std::move(Xtrain), std::move(Ytrain), std::move(ncomp), controls, solver
+  );
+  List out = List::create(
+    Named("C_latent") = model.latent_coefficients,
+    Named("W_latent") = model.prediction_weights,
+    Named("Q") = model.Q, Named("Ttrain") = model.scores,
+    Named("R") = model.R, Named("mX") = model.x_mean,
+    Named("vX") = model.x_scale, Named("mY") = model.y_mean,
+    Named("p") = p, Named("m") = m, Named("ncomp") = model.components,
+    Named("Yfit") = model.fitted, Named("R2Y") = model.r2
+  );
+  if (controls.store_coefficients) out["B"] = model.coefficients;
+  annotate_coefficient_storage(out, controls.store_coefficients);
+  return out;
+}

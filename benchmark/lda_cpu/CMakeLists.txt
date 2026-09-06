@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT
+cmake_minimum_required(VERSION 3.18)
+project(lda_cpu_comparison LANGUAGES CXX)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+if(NOT FASTPLS_SOURCE)
+  message(FATAL_ERROR "Set FASTPLS_SOURCE to the current development source")
+endif()
+add_subdirectory("${FASTPLS_SOURCE}/core" native)
+add_executable(lda_benchmark benchmark.cpp)
+target_link_libraries(lda_benchmark PRIVATE fastpls::native)
+add_executable(lda_audit audit.cpp)
+target_link_libraries(lda_audit PRIVATE fastpls::native)
