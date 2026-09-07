@@ -53,7 +53,7 @@ def main():
                VECLIB_MAXIMUM_THREADS="1")
     for name, command in [
         ("build", ["R", "CMD", "build", str(snapshot)]),
-        ("check", ["R", "CMD", "check", "--as-cran", "fastPLSextra_0.0.1.tar.gz"]),
+        ("check", ["R", "CMD", "check", "--as-cran", "fastPLSextra_0.0.2.tar.gz"]),
     ]:
         print(name, flush=True)
         with (out / (name + ".log")).open("w") as log:

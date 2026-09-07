@@ -22,6 +22,20 @@ if (anyNA(c(seed, oversample, power, ncomp))) {
 
 task <- readRDS(task_path)
 library(fastPLS)
+`%||%` <- function(left, right) if (is.null(left)) right else left
+precision <- match.arg(
+  Sys.getenv("FASTPLS_BENCH_PRECISION", "float64"),
+  c("float32", "float64")
+)
+if (identical(precision, "float32")) {
+  task$Xtrain <- float::fl(as.matrix(task$Xtrain))
+  task$Xtest <- float::fl(as.matrix(task$Xtest))
+} else {
+  task$Xtrain <- as.matrix(task$Xtrain)
+  task$Xtest <- as.matrix(task$Xtest)
+  storage.mode(task$Xtrain) <- "double"
+  storage.mode(task$Xtest) <- "double"
+}
 gc(FALSE)
 
 fit_start <- proc.time()[[3L]]
@@ -53,6 +67,7 @@ predicted <- factor(prediction, levels = levels(task$Ytest))
 utils::write.csv(data.frame(
   dataset = task$dataset,
   backend = backend,
+  precision = precision,
   package_version = as.character(utils::packageVersion("fastPLS")),
   replicate = replicate_id,
   ncomp = ncomp,
@@ -63,5 +78,12 @@ utils::write.csv(data.frame(
   prediction_sec = prediction_sec,
   total_sec = fit_sec + prediction_sec,
   accuracy = mean(predicted == task$Ytest),
+  execution_route = fit$diagnostics$residency$route %||%
+    fit$diagnostics$execution_route %||% "compiled CPU",
+  algorithm_variant = fit$diagnostics$algorithm_variant %||% NA_character_,
+  refresh_block = fit$diagnostics$resident_controls$refresh_block %||%
+    fit$diagnostics$simpls_direction$directions_per_solve %||% NA_integer_,
+  effective_oversample = fit$diagnostics$rsvd$oversample %||% NA_integer_,
+  effective_power = fit$diagnostics$rsvd$power %||% NA_integer_,
   prediction_checksum = sum(as.integer(predicted) * seq_along(predicted))
 ), output_csv, row.names = FALSE)

@@ -2,6 +2,9 @@
 ^migration$
 ^archive$
 ^tools$
+^benchmark$
+^scripts$
+^config$
 ^MIGRATION[.]md$
 ^COPYING$
 ^tests/.*[.]py$

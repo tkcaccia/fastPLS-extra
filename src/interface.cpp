@@ -3,7 +3,6 @@
 #include <RcppArmadillo.h>
 #include <fastpls/native/simpls.hpp>
 #include <fastpls/native/plssvd.hpp>
-#include <fastpls/native/operators.hpp>
 #include "irlba_workspace.h"
 
 class Solver {
@@ -44,82 +43,21 @@ class Solver {
       Rcpp::Named("algorithm") = algorithms);
   }
 
-  template<class Operator>
-  fastpls::native::SingularTriplets<double> solve_operator(Operator& A, int k) {
-    const int bound = std::min(A.n_rows, A.n_cols);
-    if (k < 1 || k > bound) Rcpp::stop("Invalid operator rank");
-    const int width = std::min(bound, work <= k ? std::max(k + 7, 8) : work);
-    fastpls::native::SingularTriplets<double> out;
-    if (bound < 6 || width == bound) {
-      arma::mat V;
-      A.full_svd(out.U, out.s, V, false);
-      if (out.s.n_elem < arma::uword(k)) Rcpp::stop("Operator rank bound exceeded");
-      out.U = out.U.head_cols(k).eval();
-      out.s = out.s.head(k).eval();
-      out.Vt = V.head_cols(k).t();
-      iterations.push_back(0); products.push_back(0); statuses.push_back(0);
-      algorithms.push_back("factor_product_full_subspace");
-    } else {
-      fastpls_irlba_operator callback;
-      callback.data = &A;
-      callback.mult = [](char transpose, int rows, int columns, void* data,
-                         double* input, double* output) {
-        const bool transposed = transpose == 't' || transpose == 'T';
-        arma::mat rhs(input, transposed ? rows : columns, 1, false, true);
-        arma::mat target(output, transposed ? columns : rows, 1, false, true);
-        target = static_cast<Operator*>(data)->multiply(rhs, transposed);
-      };
-      workspace.solve(nullptr, &callback, A.n_rows, A.n_cols, k, width,
-                      maxit, tol, eps, svtol);
-      iterations.push_back(workspace.iterations);
-      products.push_back(workspace.products); statuses.push_back(workspace.status);
-      algorithms.push_back("irlba_crossprod");
-      if (workspace.status != 0)
-        Rcpp::stop("IRLBA did not converge (status %d)", workspace.status);
-      out.U = workspace.U.head_cols(k);
-      out.s = workspace.s;
-      out.Vt = workspace.V.head_cols(k).t();
-    }
-    if (!out.U.is_finite() || !out.s.is_finite() || !out.Vt.is_finite())
-      Rcpp::stop("IRLBA operator returned non-finite factors");
-    return out;
-  }
 };
-
-// [[Rcpp::export]]
-Rcpp::List extra_irlba_crossprod_cpp(const arma::mat& x, const arma::mat& y,
-                                    int k, int work, int maxit,
-                                    double tol, double eps, double svtol) {
-  fastpls::native::CrosscovOperator<double> op(x, y, 0);
-  Solver solver;
-  solver.work = work; solver.maxit = maxit;
-  solver.tol = tol; solver.eps = eps; solver.svtol = svtol;
-  auto result = solver.solve_operator(op, k);
-  return Rcpp::List::create(Rcpp::Named("u") = result.U,
-    Rcpp::Named("d") = result.s, Rcpp::Named("v") = arma::mat(result.Vt.t()),
-    Rcpp::Named("convergence") = solver.diagnostics());
-}
-
-// [[Rcpp::export]]
-Rcpp::List extra_irlba_cpp(const arma::mat& x, int k, int work, int maxit,
-                          double tol, double eps, double svtol) {
-  Solver solver;
-  solver.work = work; solver.maxit = maxit;
-  solver.tol = tol; solver.eps = eps; solver.svtol = svtol;
-  auto result = solver.solve(x, k, false);
-  return Rcpp::List::create(Rcpp::Named("u") = result.U,
-    Rcpp::Named("d") = result.s, Rcpp::Named("v") = arma::mat(result.Vt.t()),
-    Rcpp::Named("convergence") = solver.diagnostics());
-}
 
 template<class Model>
 Rcpp::List wrap_model(const Model& model, const std::string& family, const Solver& solver) {
-  return Rcpp::List::create(Rcpp::Named("R") = model.R, Rcpp::Named("Q") = model.Q,
-    Rcpp::Named("scores") = model.scores, Rcpp::Named("mX") = model.x_mean,
+  Rcpp::List result = Rcpp::List::create(
+    Rcpp::Named("R") = model.R, Rcpp::Named("Q") = model.Q,
+    Rcpp::Named("mX") = model.x_mean,
     Rcpp::Named("vX") = model.x_scale, Rcpp::Named("mY") = model.y_mean,
-    Rcpp::Named("ncomp") = model.components, Rcpp::Named("Yfit") = model.fitted,
-    Rcpp::Named("R2Y") = model.r2, Rcpp::Named("method") = family,
+    Rcpp::Named("ncomp") = model.components, Rcpp::Named("method") = family,
     Rcpp::Named("convergence") = solver.diagnostics());
+  if (model.fitted.n_slices > 0) {
+    result["Yfit"] = model.fitted;
+    result["R2Y"] = model.r2;
+  }
+  return result;
 }
 
 // [[Rcpp::export]]
@@ -129,21 +67,32 @@ Rcpp::List extra_pls_cpp(const arma::mat& x, const arma::mat& y,
   if (method == "simpls") {
     fastpls::native::SimplsOptions options;
     options.scaling = scaling; options.fitted = fitted;
-    options.randomized_directions = false; options.store_scores = true;
+    options.randomized_directions = false;
+    options.store_scores = false;
+    options.store_coefficients = false;
     auto direction = [&](const arma::mat& A, const arma::mat&, bool, int,
                           unsigned int, arma::mat& U) {
       U = solver.solve(A, 1, true).U;
       return U.n_cols > 0;
     };
-    auto model = fastpls::native::fit_simpls_with_solver(x, y, components, options, direction);
+    arma::mat x_workspace = x;
+    auto model = fastpls::native::fit_simpls_with_solver(
+      x, y, components, options, direction, &x_workspace
+    );
     if (model.completed_components < components.max()) Rcpp::stop("SIMPLS stopped before the requested component");
     return wrap_model(model, method, solver);
   }
   if (method != "plssvd") Rcpp::stop("Unknown PLS family");
   fastpls::native::PlssvdOptions options;
-  options.scaling = scaling; options.fitted = fitted;
+  options.scaling = scaling;
+  options.fitted = fitted;
+  options.store_coefficients = false;
+  options.cache_score_gram = true;
   auto decompose = [&](const arma::mat& A, int k, int) { return solver.solve(A, k, false); };
-  auto model = fastpls::native::fit_plssvd_with_solver(x, y, components, options, decompose);
+  arma::mat x_workspace = x;
+  auto model = fastpls::native::fit_plssvd_with_solver(
+    x, y, components, options, decompose, &x_workspace
+  );
   Rcpp::List result = wrap_model(model, method, solver);
   result["weights"] = model.prediction_weights;
   return result;
@@ -153,23 +102,60 @@ Rcpp::List extra_pls_cpp(const arma::mat& x, const arma::mat& y,
 Rcpp::List extra_predict_cpp(Rcpp::List model, const arma::mat& x) {
   const std::string family = Rcpp::as<std::string>(model["method"]);
   const arma::ivec counts = Rcpp::as<arma::ivec>(model["ncomp"]);
+  if (counts.n_elem < 1 || arma::any(counts < 1) ||
+      (counts.n_elem > 1 && arma::any(arma::diff(counts) <= 0))) {
+    Rcpp::stop("Stored component counts must be strictly increasing");
+  }
+  arma::mat standardized = x;
+  const arma::mat x_mean = Rcpp::as<arma::mat>(model["mX"]);
+  const arma::mat x_scale = Rcpp::as<arma::mat>(model["vX"]);
+  const arma::mat y_mean = Rcpp::as<arma::mat>(model["mY"]);
+  if (standardized.n_cols != x_mean.n_cols ||
+      standardized.n_cols != x_scale.n_cols) {
+    Rcpp::stop("Predictor column count differs from training");
+  }
+  standardized.each_row() -= x_mean;
+  standardized.each_row() /= x_scale;
   Rcpp::List out(counts.n_elem);
   if (family == "simpls") {
-    fastpls::native::SimplsModel<double> fit;
-    fit.R = Rcpp::as<arma::mat>(model["R"]); fit.Q = Rcpp::as<arma::mat>(model["Q"]);
-    fit.x_mean = Rcpp::as<arma::mat>(model["mX"]); fit.x_scale = Rcpp::as<arma::mat>(model["vX"]);
-    fit.y_mean = Rcpp::as<arma::mat>(model["mY"]);
-    fit.completed_components = fit.R.n_cols;
-    for (arma::uword j = 0; j < counts.n_elem; ++j)
-      out[j] = fastpls::native::predict_simpls(fit, x, counts(j));
+    const arma::mat R = Rcpp::as<arma::mat>(model["R"]);
+    const arma::mat Q = Rcpp::as<arma::mat>(model["Q"]);
+    const int maximum = counts.max();
+    if (R.n_cols < static_cast<arma::uword>(maximum) ||
+        Q.n_cols < static_cast<arma::uword>(maximum) ||
+        Q.n_rows != y_mean.n_cols) {
+      Rcpp::stop("SIMPLS model dimensions are inconsistent");
+    }
+    const arma::mat scores = standardized * R.cols(0, maximum - 1);
+    arma::mat prediction(x.n_rows, Q.n_rows, arma::fill::zeros);
+    int previous = 0;
+    for (arma::uword j = 0; j < counts.n_elem; ++j) {
+      const int current = counts(j);
+      prediction += scores.cols(previous, current - 1) *
+        Q.cols(previous, current - 1).t();
+      arma::mat value = prediction;
+      value.each_row() += y_mean;
+      out[j] = value;
+      previous = current;
+    }
   } else {
-    fastpls::native::PlssvdModel<double> fit;
-    fit.R = Rcpp::as<arma::mat>(model["R"]); fit.components = counts;
-    fit.x_mean = Rcpp::as<arma::mat>(model["mX"]); fit.x_scale = Rcpp::as<arma::mat>(model["vX"]);
-    fit.y_mean = Rcpp::as<arma::mat>(model["mY"]);
-    fit.prediction_weights = Rcpp::as<arma::cube>(model["weights"]);
-    for (arma::uword j = 0; j < counts.n_elem; ++j)
-      out[j] = fastpls::native::predict_plssvd(fit, x, j);
+    if (family != "plssvd") Rcpp::stop("Unknown PLS family");
+    const arma::mat R = Rcpp::as<arma::mat>(model["R"]);
+    const arma::cube weights = Rcpp::as<arma::cube>(model["weights"]);
+    const int maximum = counts.max();
+    if (R.n_cols < static_cast<arma::uword>(maximum) ||
+        weights.n_slices < counts.n_elem ||
+        weights.n_cols != y_mean.n_cols) {
+      Rcpp::stop("PLS-SVD model dimensions are inconsistent");
+    }
+    const arma::mat scores = standardized * R.cols(0, maximum - 1);
+    for (arma::uword j = 0; j < counts.n_elem; ++j) {
+      const int current = counts(j);
+      arma::mat value = scores.cols(0, current - 1) *
+        weights.slice(j).rows(0, current - 1);
+      value.each_row() += y_mean;
+      out[j] = value;
+    }
   }
   return out;
 }

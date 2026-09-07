@@ -3,21 +3,21 @@
 Companion source repository for fastPLS extensions, reproducible benchmarks,
 and publication-generation code. This directory has not yet been published.
 
-It now contains an installable development R package named `fastPLSextra`.
-Install the current development fastPLS headers first, then use
-`R CMD INSTALL /path/to/fastPLS-extra`. Its initial `irlba()` and `pls_irlba()`
-interfaces support explicit CPU float64 SVD, SIMPLS and PLS-SVD. Models can
-be serialized and used with `predict()`. `irlba_crossprod(x, y, ncomp)`
-decomposes the uncentered product `t(x) %*% y` through shared native operators,
-without allocating that product. Implicit PLS fitting, float32 and GPU companion
-routes have not yet been migrated; unsupported inputs are not silently
-converted. This is not a release-ready replacement for every former IRLBA path.
+It contains a deliberately focused development R package named
+`fastPLSextra`. Install the current development fastPLS headers first, then use
+`R CMD INSTALL /path/to/fastPLS-extra`. Its only modelling interface is
+`pls_irlba()`, with `predict()` for held-out samples. It supplies the CPU
+float64 SIMPLS/IRLBA and PLS-SVD/IRLBA controls required by the manuscript's
+NMR benchmark. Cross-validation, standalone SVD, classification heads,
+float32 and accelerator IRLBA routes are intentionally excluded.
 
 The intended dependency direction is `fastPLS-extra -> fastPLS`, never the
 reverse. Native rSVD, SIMPLS, PLS-SVD, OPLS, kernel PLS, classification and
-cross-validation remain in fastPLS. IRLBA integration and manuscript experiments
-belong here. Moving a solver must not duplicate the PLS engines or silently
-substitute a different estimator.
+cross-validation remain in fastPLS. The companion includes the current fastPLS
+native headers at compilation, so its IRLBA controls use the same preprocessing,
+deflation, cached products, compact model representation and prediction path as
+the main implementation. Moving the solver must not duplicate the PLS engines
+or silently substitute a different estimator.
 
 ## License Boundary
 

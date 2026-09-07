@@ -118,8 +118,13 @@ CUDA may generate up to eight fresh candidates together for eligible large
 classification workloads. Those candidates are accepted one at a time only
 after the same sequential SIMPLS orthogonalization, score/loading, and
 deflation updates shown above. CPU supports explicit and matrix-free sketches,
-CUDA performs the large sketch products on device, and Metal performs the
-large sketch products on the GPU with the reduced QR/SVD on the host.
+CUDA performs the large sketch products on device. For response-wide implicit
+SIMPLS, Metal forms the exact sample-space response Gram matrix `Y Y'` once,
+keeps the component updates and persistent matrix products on the GPU, defers
+`Q = Y'T` until all components are available, and submits the sequential path
+as one command stream. This avoids one response-wide product and one command
+submission per component while preserving the sequential dependence between
+components.
 
 ## Exact dense-reference audit
 

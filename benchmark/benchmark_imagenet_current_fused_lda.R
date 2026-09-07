@@ -1,10 +1,10 @@
 #!/usr/bin/env Rscript
 
-# Reproduce the current fastPLS CUDA SIMPLS classification routes on the stored
+# Reproduce the current fastPLS CUDA classification routes on the stored
 # ImageNet/DINOv2 development split. One maximal component path supplies all
 # requested prefixes for one classification head.
 
-options(stringsAsFactors = FALSE, fastPLS.fused_cuda_lda = TRUE)
+options(stringsAsFactors = FALSE)
 
 env <- function(name, default = "") {
   value <- Sys.getenv(name, unset = default)
@@ -41,13 +41,25 @@ as_double_matrix <- function(x) {
   }
   as.matrix(x)
 }
-component_value <- function(x, ncomp, index) {
-  key <- paste0("ncomp=", ncomp)
+component_value <- function(x, ncomp, index, effective_ncomp = ncomp) {
+  keys <- unique(paste0("ncomp=", c(ncomp, effective_ncomp)))
   if (is.list(x) && !is.data.frame(x)) {
-    if (!is.null(names(x)) && key %in% names(x)) return(x[[key]])
+    if (!is.null(names(x))) {
+      matched <- keys[keys %in% names(x)]
+      if (length(matched)) return(x[[matched[[1L]]]])
+    }
+    if (index > length(x)) {
+      stop("Prediction path is shorter than the requested component path")
+    }
     return(x[[index]])
   }
-  if (is.data.frame(x)) return(x[[key]])
+  if (is.data.frame(x)) {
+    matched <- keys[keys %in% names(x)]
+    if (!length(matched)) {
+      stop("Prediction data frame lacks the requested/effective component")
+    }
+    return(x[[matched[[1L]]]])
+  }
   dims <- dim(x)
   if (length(dims) == 3L) return(x[, , 1L, drop = TRUE])
   if (length(dims) == 2L && ncol(x) == 1L) return(x[, 1L])
@@ -91,6 +103,16 @@ loaded_package_path <- normalizePath(
   mustWork = TRUE
 )
 loaded_package_version <- as.character(utils::packageVersion("fastPLS"))
+if (nzchar(lib)) {
+  requested_library <- normalizePath(lib, winslash = "/", mustWork = TRUE)
+  if (!startsWith(
+    loaded_package_path,
+    paste0(requested_library, .Platform$file.sep)
+  )) {
+    stop("Loaded fastPLS outside FASTPLS_LIB: ", loaded_package_path)
+  }
+}
+source_id <- env("FASTPLS_SOURCE_ID", "unrecorded")
 
 task_file <- path.expand(env(
   "TASK_RDS",
@@ -105,6 +127,7 @@ ncomp_grid <- as.integer(strsplit(env(
 ), ",", fixed = TRUE)[[1L]])
 ncomp_grid <- sort(unique(ncomp_grid[is.finite(ncomp_grid) & ncomp_grid > 0L]))
 if (!length(ncomp_grid)) stop("NCOMP_GRID must contain positive integers")
+method <- match.arg(env("METHOD", "simpls"), c("simpls", "plssvd"))
 classifier <- match.arg(env("CLASSIFIER", "lda"), c("argmax", "lda"))
 oversample_arg <- env("OVERSAMPLE", "auto")
 power_arg <- env("POWER", "auto")
@@ -126,7 +149,7 @@ row_template <- data.frame(
   test_n = NA_integer_,
   p = NA_integer_,
   q = NA_integer_,
-  method = "simpls",
+  method = method,
   solver = "rsvd",
   backend = "cuda",
   classifier = classifier,
@@ -168,6 +191,8 @@ row_template <- data.frame(
   audit_status = "approximate_workflow_result",
   loaded_package_path = loaded_package_path,
   loaded_package_version = loaded_package_version,
+  source_id = source_id,
+  algorithm_variant = NA_character_,
   status = "started",
   error = "",
   stringsAsFactors = FALSE
@@ -226,7 +251,7 @@ tryCatch({
   gpu_before_fit <- gpu_used_mb()
   set.seed(seed)
   stamp(
-    "Fitting current CUDA SIMPLS-", toupper(classifier),
+    "Fitting current CUDA ", toupper(method), "-", toupper(classifier),
     ": ncomp=", paste(ncomp_grid, collapse = ","),
     " controls=", if (automatic_controls) {
       "public automatic"
@@ -238,7 +263,7 @@ tryCatch({
     Xtrain = Xtrain,
     Ytrain = task$Ytrain,
     ncomp = ncomp_grid,
-    method = "simpls",
+    method = method,
     svd.method = "rsvd",
     backend = "cuda",
     classifier = classifier,
@@ -287,9 +312,14 @@ tryCatch({
     NA_character_
   }
   model_gpu_resident <- isTRUE(internal$gpu_resident)
-  if (!identical(executed_estimator, "simpls")) {
+  algorithm_variant <- if (is.null(fit$diagnostics$algorithm_variant)) {
+    NA_character_
+  } else {
+    as.character(fit$diagnostics$algorithm_variant)[1L]
+  }
+  if (!identical(executed_estimator, method)) {
     stop(
-      "Requested SIMPLS but executed estimator was ",
+      "Requested ", method, " but executed estimator was ",
       executed_estimator
     )
   }
@@ -342,10 +372,11 @@ tryCatch({
   effective <- as.integer(internal$ncomp)
   for (i in seq_along(ncomp_grid)) {
     k <- ncomp_grid[[i]]
-    predicted <- component_value(pred$Ypred, k, i)
-    top_labels <- component_value(pred$Ypred_top, k, i)
+    effective_k <- if (length(effective) >= i) effective[[i]] else k
+    predicted <- component_value(pred$Ypred, k, i, effective_k)
+    top_labels <- component_value(pred$Ypred_top, k, i, effective_k)
     metrics <- classification_metrics(task$Ytest, predicted, top_labels)
-    rows[[i]]$ncomp_effective <- if (length(effective) >= i) effective[[i]] else k
+    rows[[i]]$ncomp_effective <- effective_k
     rows[[i]]$control_profile <- control_profile
     rows[[i]]$effective_oversample <- effective_oversample
     rows[[i]]$effective_power <- effective_power
@@ -367,6 +398,7 @@ tryCatch({
     rows[[i]]$prediction_backend <- prediction_backend
     rows[[i]]$classifier_train_backend <- classifier_train_backend
     rows[[i]]$model_gpu_resident <- model_gpu_resident
+    rows[[i]]$algorithm_variant <- algorithm_variant
     rows[[i]]$fit_residency <- if (!is.null(internal$execution_route)) {
       as.character(internal$execution_route)[1L]
     } else {

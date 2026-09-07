@@ -1,0 +1,6 @@
+ikpls==6.1.2
+numpy==1.26.4
+pandas==2.3.3
+pls4all==1.0.18
+psutil==7.1.3
+scikit-learn==1.7.2

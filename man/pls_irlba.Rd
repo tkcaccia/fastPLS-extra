@@ -1,9 +1,10 @@
 \name{pls_irlba}
 \alias{pls_irlba}
 \alias{predict.fastPLSextra}
-\title{PLS Models Using the Companion Iterative Solver}
-\description{Fits SIMPLS or PLS-SVD using the native PLS engines supplied by
-fastPLS, with IRLBA as the direction solver.}
+\title{NMR Benchmark PLS Models Using IRLBA}
+\description{Fits the CPU float64 SIMPLS or PLS-SVD controls required by the
+NMR manuscript benchmark. The PLS execution is supplied by the optimized
+native engines in fastPLS and IRLBA is used only as the direction solver.}
 \usage{
 pls_irlba(Xtrain, Ytrain, Xtest = NULL, ncomp = 2L,
   method = c("simpls", "plssvd"),
@@ -25,20 +26,22 @@ neither. Responses are centered.}
 \item{newdata}{Independent predictors with the training column order.}
 \item{...}{Reserved; no additional prediction controls are currently used.}
 }
-\value{A serializable model with projection \code{R}, response loadings
-\code{Q}, training \code{scores}, predictor means/scales \code{mX}/\code{vX},
+\value{A serializable compact model with projection \code{R}, response loadings
+\code{Q}, predictor means/scales \code{mX}/\code{vX},
 response means \code{mY}, component counts \code{ncomp}, optional \code{Yfit}
 and training \code{R2Y}, model \code{method}, and per-decomposition
 \code{convergence} records. PLS-SVD additionally stores compact prediction
 \code{weights}. \code{Ypred} is included when \code{Xtest} is supplied.
 Prediction returns a list of numeric matrices named by component count.
 When \code{fit=FALSE}, fitted responses and training R2 are omitted.}
-\details{This development interface supports explicit CPU float64 fits.
-It does not yet replace all former implicit, float32 or accelerator IRLBA
-routes. No PLS algorithm is copied into this package: its compiled adapter
-uses the installed fastPLS native headers. Nonconvergence raises an error.
-The convergence record identifies dense full-subspace decompositions
-separately from iterative IRLBA calls.}
+\details{This focused interface supports explicit CPU float64 fitting and
+prediction only. Cross-validation, classification heads, float32, CUDA and
+Metal IRLBA routes are intentionally not provided. No PLS algorithm is copied
+into this package: the compiled adapter uses the installed fastPLS native
+headers. It disables dense coefficient and training-score retention, reuses a
+single standardized test-score projection across requested component counts,
+and raises an error on IRLBA nonconvergence. The convergence record identifies
+dense full-subspace decompositions separately from iterative IRLBA calls.}
 \examples{
 x <- as.matrix(mtcars[, c("disp", "hp", "wt")])
 y <- mtcars$mpg

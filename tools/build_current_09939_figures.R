@@ -14,16 +14,26 @@ pkg_value <- if (length(args) >= 1L) args[[1L]] else Sys.getenv("FASTPLS_SOURCE_
 evidence_value <- Sys.getenv("FASTPLS_EVIDENCE_ROOT")
 out_value <- if (length(args) >= 2L) args[[2L]] else
     Sys.getenv("FASTPLS_MANUSCRIPT_OUTPUT")
-if (!nzchar(pkg_value) || !nzchar(evidence_value) || !nzchar(out_value)) {
+ikpls_panel_value <- Sys.getenv("FASTPLS_IKPLS_PANEL_SUMMARY")
+ikpls_large_value <- Sys.getenv("FASTPLS_IKPLS_LARGE_DIR")
+nmr_current_value <- Sys.getenv("FASTPLS_CURRENT_NMR_ROOT")
+if (!nzchar(pkg_value) || !nzchar(evidence_value) || !nzchar(out_value) ||
+        !nzchar(ikpls_panel_value) || !nzchar(ikpls_large_value) ||
+        !nzchar(nmr_current_value)) {
     stop(
         "Set FASTPLS_SOURCE_ROOT, FASTPLS_EVIDENCE_ROOT, and ",
-        "FASTPLS_MANUSCRIPT_OUTPUT (or pass source/output arguments).",
+        "FASTPLS_MANUSCRIPT_OUTPUT (or pass source/output arguments), and ",
+        "FASTPLS_IKPLS_PANEL_SUMMARY, FASTPLS_IKPLS_LARGE_DIR, and ",
+        "FASTPLS_CURRENT_NMR_ROOT.",
         call. = FALSE
     )
 }
 pkg <- normalizePath(pkg_value, mustWork = TRUE)
 evidence <- normalizePath(evidence_value, mustWork = TRUE)
 out <- normalizePath(out_value, mustWork = FALSE)
+ikpls_panel_path <- normalizePath(ikpls_panel_value, mustWork = TRUE)
+ikpls_large_dir <- normalizePath(ikpls_large_value, mustWork = TRUE)
+nmr_current <- normalizePath(nmr_current_value, mustWork = TRUE)
 figdir <- file.path(out, "figures")
 tabdir <- file.path(out, "tables")
 dir.create(figdir, recursive = TRUE, showWarnings = FALSE)
@@ -107,12 +117,83 @@ lda <- read_required(file.path(
 external <- read_required(file.path(
     release, "r_package_panel", "pls_package_comparison_summary.csv"
 ))
-ikpls <- read_required(file.path(
-    release, "ikpls_cross_language_cpu", "ikpls_cross_language_summary.csv"
-))
-ikpls_fastpls <- read_required(file.path(
-    optimized, "ikpls_fastpls_current2", "ikpls_cross_language_summary.csv"
-))
+ikpls <- read_required(ikpls_panel_path)
+ikpls_task_ids <- c(dataset_ids, "cbmc_citeseq", "prism")
+ikpls_panel <- ikpls[
+    ikpls$implementation == "IKPLS_numpy_alg2" &
+        ikpls$dataset %in% ikpls_task_ids,
+]
+missing_ikpls <- setdiff(ikpls_task_ids, ikpls_panel$dataset)
+if (length(missing_ikpls)) {
+    stop("IKPLS panel is incomplete: ", paste(missing_ikpls, collapse = ", "))
+}
+if (anyDuplicated(ikpls_panel$dataset)) {
+    stop("IKPLS panel contains duplicated dataset summaries.")
+}
+if (any(ikpls_panel$repetitions < 10L)) {
+    stop("IKPLS panel contains fewer than ten successful repetitions.")
+}
+matched_counts <- merge(
+    argmax[, c("dataset", "ncomp")],
+    ikpls_panel[, c("dataset", "ncomp")],
+    by = "dataset", suffixes = c("_fastpls", "_ikpls")
+)
+if (any(matched_counts$ncomp_fastpls != matched_counts$ncomp_ikpls)) {
+    stop("IKPLS and fastPLS component counts differ in Figure 1.")
+}
+write.csv(
+    ikpls_panel,
+    file.path(tabdir, "ikpls_complete_panel_summary.csv"),
+    row.names = FALSE, na = ""
+)
+
+ikpls_standard_status <- data.frame(
+    dataset = ikpls_panel$dataset,
+    task_type = ikpls_panel$task_type,
+    ncomp = ikpls_panel$ncomp,
+    status = "success",
+    metric_name = ifelse(ikpls_panel$task_type == "classification",
+                         "accuracy", "RMSD"),
+    metric_value = ifelse(ikpls_panel$task_type == "classification",
+                          ikpls_panel$accuracy, ikpls_panel$rmsd),
+    top5_accuracy = ikpls_panel$top5_accuracy,
+    median_total_sec = ikpls_panel$median_total_sec,
+    iqr_total_sec = ikpls_panel$iqr_total_sec,
+    peak_rss_mib = ikpls_panel$median_peak_rss_mib,
+    incremental_peak_rss_mib = ikpls_panel$median_incremental_peak_rss_mib,
+    repetitions = ikpls_panel$repetitions,
+    error = "",
+    stringsAsFactors = FALSE
+)
+large_paths <- c(
+    file.path(ikpls_large_dir, "nmr_ikpls_f32_n50.csv"),
+    file.path(ikpls_large_dir, paste0(
+        "imagenet_ikpls_f32_n", c(100, 200, 500, 1000), ".csv"
+    ))
+)
+ikpls_large <- do.call(rbind, lapply(large_paths, read_required))
+ikpls_large_status <- data.frame(
+    dataset = ikpls_large$dataset,
+    task_type = ifelse(ikpls_large$dataset == "nmr", "regression",
+                       "classification"),
+    ncomp = ikpls_large$ncomp,
+    status = ikpls_large$status,
+    metric_name = ifelse(ikpls_large$dataset == "nmr", "RMSD", "accuracy"),
+    metric_value = ikpls_large$top1_accuracy_or_rmsd,
+    top5_accuracy = ikpls_large$top5_accuracy,
+    median_total_sec = ikpls_large$total_sec,
+    iqr_total_sec = NA_real_,
+    peak_rss_mib = ikpls_large$peak_rss_mib,
+    incremental_peak_rss_mib = ikpls_large$incremental_peak_rss_mib,
+    repetitions = 1L,
+    error = ikpls_large$error,
+    stringsAsFactors = FALSE
+)
+write.csv(
+    rbind(ikpls_standard_status, ikpls_large_status),
+    file.path(tabdir, "ikpls_all_dataset_status.csv"),
+    row.names = FALSE, na = ""
+)
 
 fast_row <- function(data, label) {
     data.frame(
@@ -135,25 +216,6 @@ comparison <- rbind(
     fast_row(argmax, "fastPLS SIMPLS / argmax"),
     fast_row(lda, "fastPLS SIMPLS / LDA")
 )
-
-matched_fastpls <- ikpls_fastpls[
-    ikpls_fastpls$implementation == "fastPLS_cpu_rsvd" &
-        ikpls_fastpls$dataset %in% c("cifar100", "metref"),
-]
-if (nrow(matched_fastpls)) {
-    comparison <- rbind(comparison, data.frame(
-        dataset = matched_fastpls$dataset,
-        display = "fastPLS / matched IKPLS task*",
-        accuracy = matched_fastpls$accuracy,
-        time_sec = matched_fastpls$median_total_sec,
-        peak_rss_mib = matched_fastpls$median_peak_rss_mb,
-        memory_lower_bound = FALSE,
-        ncomp = matched_fastpls$ncomp,
-        repetitions = matched_fastpls$repetitions,
-        precision = matched_fastpls$precision,
-        stringsAsFactors = FALSE
-    ))
-}
 
 external_map <- c(
     pls_simpls_fit = "pls / SIMPLS",
@@ -184,19 +246,15 @@ if (nrow(ext)) {
     comparison <- rbind(comparison, ext_rows)
 }
 
-# Only saved IKPLS measurements are used. Their component counts differ from
-# the training-selected panel and are therefore marked explicitly in the table.
-ik <- ikpls[
-    ikpls$implementation == "IKPLS_numpy_alg2" &
-        ikpls$dataset %in% c("cifar100", "metref"),
-]
+# IKPLS uses the same dataset-specific component counts as current fastPLS.
+ik <- ikpls_panel[ikpls_panel$dataset %in% dataset_ids, ]
 if (nrow(ik)) {
     ik_rows <- data.frame(
         dataset = ik$dataset,
-        display = "IKPLS / algorithm 2*",
+        display = "IKPLS / algorithm 2",
         accuracy = ik$accuracy,
         time_sec = ik$median_total_sec,
-        peak_rss_mib = ik$median_peak_rss_mb,
+        peak_rss_mib = ik$median_peak_rss_mib,
         memory_lower_bound = FALSE,
         ncomp = ik$ncomp,
         repetitions = ik$repetitions,
@@ -208,7 +266,7 @@ if (nrow(ik)) {
 
 display_order <- c(
     "fastPLS SIMPLS / argmax", "fastPLS SIMPLS / LDA",
-    "fastPLS / matched IKPLS task*", "IKPLS / algorithm 2*",
+    "IKPLS / algorithm 2",
     "pls / SIMPLS", "plsgenomics / PLS-LDA",
     "mdatools / PLS-DA", "plsdepot / SIMPLS", "pcv / SIMPLS",
     "chemometrics / PLS eigen", "mixOmics / PLS-DA", "spls / sPLS-DA"
@@ -269,8 +327,8 @@ figure1 <- (p1a / p1b / p1c) +
     plot_annotation(
         title = "Single-CPU SIMPLS classification workflows",
         subtitle = paste(
-            "One effective BLAS thread; current fastPLS uses ten isolated repetitions and independent rows use three or ten as recorded.\n",
-            "*Stored IKPLS comparisons use 50 components for CIFAR-100 and 22 for MetRef."
+            "One effective BLAS thread; current fastPLS and IKPLS use the same",
+            "dataset-specific component counts and ten isolated repetitions."
         ),
         theme = theme(plot.title = element_text(face = "bold", size = 14),
                       plot.subtitle = element_text(size = 9))
@@ -378,30 +436,60 @@ save_plot(figure2, "figure2_backend_runtime", 10.5, 12.0)
 
 # Figure 3: fixed 165-component NMR comparison and current spectra.
 read_many <- function(paths) do.call(rbind, lapply(paths, read_required))
-nmr_paths <- c(
-    file.path(optimized, "nmr_cpu_plssvd_f32_k165",
-              "plssvd_cpu_float32_165.csv"),
-    file.path(optimized, "nmr_cpu_simpls_f32_rankone_k165",
-              "simpls_cpu_float32_165.csv"),
-    file.path(optimized, "nmr_cuda_plssvd_f32_k165",
-              "plssvd_cuda_float32_165.csv"),
-    file.path(optimized, "nmr_cuda_simpls_f32_rankone_k165",
-              "simpls_cuda_float32_165.csv"),
-    file.path(optimized, "nmr_metal_plssvd_f32_k165_escalated",
-              "plssvd_metal_float32_165.csv"),
-    file.path(optimized, "nmr_metal_simpls_f32_rankone_k165_escalated",
-              "simpls_metal_float32_165.csv")
-)
-nmr <- read_many(nmr_paths)
-nmr_summary <- aggregate(
-    cbind(total_time_sec, RMSD, Q2, MAE) ~ family + backend + precision + ncomp,
-    nmr, median
-)
-nmr_summary$implementation <- paste(
-    ifelse(nmr_summary$family == "plssvd", "PLS-SVD", "SIMPLS"),
-    ifelse(nmr_summary$backend == "metal", "Metal",
-           toupper(nmr_summary$backend)), sep = " / "
-)
+nmr_run <- function(paths, implementation, workstation) {
+    value <- read_many(paths)
+    data.frame(
+        implementation = implementation,
+        family = value$family[[1L]],
+        backend = value$backend[[1L]],
+        precision = value$precision[[1L]],
+        ncomp = value$ncomp[[1L]],
+        total_time_sec = median(value$total_time_sec),
+        time_q1_sec = unname(quantile(value$total_time_sec, 0.25)),
+        time_q3_sec = unname(quantile(value$total_time_sec, 0.75)),
+        repetitions = nrow(value),
+        RMSD = median(value$RMSD),
+        Q2 = median(value$Q2),
+        MAE = median(value$MAE),
+        workstation = workstation,
+        stringsAsFactors = FALSE
+    )
+}
+nmr_summary <- do.call(rbind, list(
+    nmr_run(
+        file.path(nmr_current, "mac", "fixed165_plssvd_cpu_rsvd.csv"),
+        "PLS-SVD / CPU (Mac)", "Apple M3"
+    ),
+    nmr_run(
+        file.path(nmr_current, "linux",
+                  paste0("fixed165_plssvd_cuda_fresh", 1:3, ".csv")),
+        "PLS-SVD / CUDA", "Intel i7-13700 + RTX 5060 Ti"
+    ),
+    nmr_run(
+        file.path(nmr_current, "mac",
+                  "fixed165_plssvd_metal_rsvd_final.csv"),
+        "PLS-SVD / Metal", "Apple M3"
+    ),
+    nmr_run(
+        file.path(nmr_current, "linux",
+                  paste0("fixed165_simpls_cpu_fresh", 1:3, ".csv")),
+        "SIMPLS / CPU (Linux)", "Intel i7-13700"
+    ),
+    nmr_run(
+        file.path(nmr_current, "linux",
+                  paste0("fixed165_simpls_cuda_fresh", 1:3, ".csv")),
+        "SIMPLS / CUDA", "Intel i7-13700 + RTX 5060 Ti"
+    ),
+    nmr_run(
+        file.path(nmr_current, "mac", "fixed165_simpls_cpu_rsvd.csv"),
+        "SIMPLS / CPU (Mac)", "Apple M3"
+    ),
+    nmr_run(
+        file.path(nmr_current, "mac",
+                  paste0("fixed165_simpls_metal_onecmd_fresh", 1:3, ".csv")),
+        "SIMPLS / Metal", "Apple M3"
+    )
+))
 
 deposited_file <- file.path(
     release, "nmr", "deposited", "deposited_plssvd_cpu_irlba_k165_rep1.csv"
@@ -410,8 +498,13 @@ deposited <- read_required(deposited_file)
 deposited_row <- data.frame(
     family = "plssvd", backend = "deposited", precision = deposited$precision,
     ncomp = deposited$ncomp, total_time_sec = deposited$total_time_sec,
+    time_q1_sec = deposited$total_time_sec,
+    time_q3_sec = deposited$total_time_sec,
+    repetitions = 1L,
     RMSD = deposited$RMSD, Q2 = deposited$Q2, MAE = deposited$MAE,
-    implementation = "Deposited PLS-SVD / CPU"
+    implementation = "Deposited PLS-SVD / CPU",
+    workstation = "Intel i7-13700",
+    stringsAsFactors = FALSE
 )
 nmr_summary <- rbind(nmr_summary, deposited_row)
 
@@ -425,29 +518,26 @@ monitor_value <- function(path) {
     )
 }
 memory_paths <- c(
-    "PLS-SVD / CPU" = file.path(
-        optimized, "nmr_cpu_plssvd_f32_k165",
-        "plssvd_cpu_float32_165_memory2", "summary.json"
+    "PLS-SVD / CPU (Mac)" = file.path(
+        nmr_current, "mac", "memory_plssvd_cpu_final", "summary.json"
     ),
-    "SIMPLS / CPU" = file.path(
-        optimized, "nmr_cpu_simpls_f32_rankone_k165",
-        "simpls_cpu_float32_165_memory2", "summary.json"
+    "SIMPLS / CPU (Mac)" = file.path(
+        nmr_current, "mac", "memory_simpls_cpu_final", "summary.json"
     ),
     "PLS-SVD / CUDA" = file.path(
-        optimized, "nmr_cuda_plssvd_f32_k165",
-        "plssvd_cuda_float32_165_memory", "summary.json"
+        nmr_current, "linux", "memory", "plssvd_cuda", "summary.json"
     ),
     "SIMPLS / CUDA" = file.path(
-        optimized, "nmr_cuda_simpls_f32_rankone_k165",
-        "simpls_cuda_float32_165_memory", "summary.json"
+        nmr_current, "linux", "memory", "cuda", "summary.json"
     ),
     "PLS-SVD / Metal" = file.path(
-        optimized, "nmr_metal_plssvd_f32_k165_escalated",
-        "plssvd_metal_float32_165_memory", "summary.json"
+        nmr_current, "mac", "memory_plssvd_metal_final", "summary.json"
     ),
     "SIMPLS / Metal" = file.path(
-        optimized, "nmr_metal_simpls_f32_rankone_k165_escalated",
-        "simpls_metal_float32_165_memory", "summary.json"
+        nmr_current, "mac", "memory_simpls_metal_onecmd_final", "summary.json"
+    ),
+    "SIMPLS / CPU (Linux)" = file.path(
+        nmr_current, "linux", "memory", "cpu", "summary.json"
     )
 )
 memory_rows <- lapply(names(memory_paths), function(implementation) {
@@ -468,31 +558,42 @@ write.csv(nmr_summary, file.path(tabdir, "figure3_nmr_fixed165_summary.csv"),
           row.names = FALSE)
 
 implementation_order <- c(
-    "Deposited PLS-SVD / CPU", "PLS-SVD / CPU", "PLS-SVD / CUDA",
-    "PLS-SVD / Metal", "SIMPLS / CPU", "SIMPLS / CUDA", "SIMPLS / Metal"
+    "Deposited PLS-SVD / CPU", "PLS-SVD / CPU (Mac)", "PLS-SVD / CUDA",
+    "PLS-SVD / Metal", "SIMPLS / CPU (Linux)", "SIMPLS / CUDA",
+    "SIMPLS / CPU (Mac)", "SIMPLS / Metal"
 )
 nmr_summary$implementation <- factor(nmr_summary$implementation,
                                      levels = implementation_order)
 cols <- c(
-    "Deposited PLS-SVD / CPU" = "#606060", "PLS-SVD / CPU" = "#4878A8",
+    "Deposited PLS-SVD / CPU" = "#606060",
+    "PLS-SVD / CPU (Mac)" = "#4878A8",
     "PLS-SVD / CUDA" = "#1B9E77", "PLS-SVD / Metal" = "#D95F02",
-    "SIMPLS / CPU" = "#7B6FD0", "SIMPLS / CUDA" = "#2AA198",
+    "SIMPLS / CPU (Linux)" = "#7B6FD0", "SIMPLS / CUDA" = "#2AA198",
+    "SIMPLS / CPU (Mac)" = "#8E79C6",
     "SIMPLS / Metal" = "#E69F00"
 )
 
 nmr_bar <- function(value, title, ylab, log_scale = FALSE, digits = 3) {
+    label_data <- nmr_summary
+    label_data$plot_label <- if (identical(value, "RMSD")) {
+        formatC(label_data[[value]], format = "e", digits = 2)
+    } else {
+        formatC(label_data[[value]], format = "f", digits = digits)
+    }
     p <- ggplot(nmr_summary, aes(implementation, .data[[value]],
                                  colour = implementation, fill = implementation))
     if (log_scale) {
         p <- p +
             geom_segment(aes(xend = implementation, y = 0.2,
                              yend = .data[[value]]), linewidth = 1.1) +
-            geom_point(size = 3.2)
+            geom_point(size = 3.2) +
+            geom_errorbar(aes(ymin = time_q1_sec, ymax = time_q3_sec),
+                          width = 0.22, linewidth = 0.45)
     } else {
         p <- p + geom_col(width = 0.72)
     }
     p <- p +
-        geom_text(aes(label = formatC(.data[[value]], format = "f", digits = digits)),
+        geom_text(data = label_data, aes(label = plot_label),
                   angle = 90, hjust = -0.18, size = 2.4, colour = "grey12") +
         scale_fill_manual(values = cols, guide = "none") +
         scale_colour_manual(values = cols, guide = "none") +
@@ -532,11 +633,18 @@ prediction_files <- c(
         release, "nmr", "deposited",
         "deposited_plssvd_cpu_irlba_k165_rep1_prediction.rds"
     ),
-    "PLS-SVD / CPU" = file.path(
-        optimized, "nmr_prediction_plssvd_cpu_f32_k165.rds"
+    "PLS-SVD / CPU (Mac)" = file.path(
+        nmr_current, "mac", "fixed165_plssvd_cpu_rsvd_prediction.rds"
     ),
-    "SIMPLS / CPU" = file.path(
-        optimized, "nmr_prediction_simpls_cpu_f32_k165.rds"
+    "SIMPLS / CPU (Mac)" = file.path(
+        nmr_current, "mac", "fixed165_simpls_cpu_rsvd_prediction.rds"
+    ),
+    "SIMPLS / CUDA" = file.path(
+        nmr_current, "linux", "fixed165_simpls_cuda_rsvd_prediction.rds"
+    ),
+    "SIMPLS / Metal" = file.path(
+        nmr_current, "mac",
+        "fixed165_simpls_metal_onecmd_final_prediction.rds"
     )
 )
 prediction_objects <- lapply(prediction_files, readRDS)
@@ -554,7 +662,7 @@ p3d <- ggplot(per_sample, aes(implementation, rmsd, fill = implementation)) +
     theme_publication(8) +
     theme(axis.text.x = element_text(angle = 35, hjust = 1, size = 7))
 
-simpls_prediction <- prediction_objects[["SIMPLS / CPU"]]
+simpls_prediction <- prediction_objects[["SIMPLS / CPU (Mac)"]]
 rmsd <- simpls_prediction$per_sample_rmsd
 sample_index <- which.min(abs(rmsd - median(rmsd)))
 ppm <- suppressWarnings(as.numeric(colnames(simpls_prediction$observed)))
@@ -581,13 +689,22 @@ p3e <- spectrum_panel(spectrum, "E  Representative held-out spectrum",
                       c(12, 0))
 p3f <- spectrum_panel(spectrum, "F  Expanded spectral region", c(1.7, 0.5))
 
+time_for <- function(label) {
+    nmr_summary$total_time_sec[as.character(nmr_summary$implementation) == label]
+}
+cuda_simpls_speedup <-
+    time_for("SIMPLS / CPU (Linux)") / time_for("SIMPLS / CUDA")
+metal_simpls_ratio <-
+    time_for("SIMPLS / CPU (Mac)") / time_for("SIMPLS / Metal")
 figure3 <- ((p3a | p3b) / (p3c | p3d) / (p3e | p3f)) +
     plot_annotation(
         title = "NMR prediction at a common 165-component workload",
         subtitle = paste0(
-            "The displayed spectrum is held-out sample ", sample_index,
-            " (", rownames(simpls_prediction$observed)[sample_index],
-            "), selected as the sample nearest the median SIMPLS per-spectrum RMSD."
+            "Matched SIMPLS CPU/CUDA speed-up: ",
+            sprintf("%.1fx", cuda_simpls_speedup),
+            "; matched Mac CPU/Metal runtime ratio: ",
+            sprintf("%.2fx", metal_simpls_ratio),
+            ". Values above one favour the accelerator."
         ),
         theme = theme(plot.title = element_text(face = "bold", size = 13),
                       plot.subtitle = element_text(size = 8.7))

@@ -11,41 +11,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// extra_irlba_crossprod_cpp
-Rcpp::List extra_irlba_crossprod_cpp(const arma::mat& x, const arma::mat& y, int k, int work, int maxit, double tol, double eps, double svtol);
-RcppExport SEXP _fastPLSextra_extra_irlba_crossprod_cpp(SEXP xSEXP, SEXP ySEXP, SEXP kSEXP, SEXP workSEXP, SEXP maxitSEXP, SEXP tolSEXP, SEXP epsSEXP, SEXP svtolSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type x(xSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type y(ySEXP);
-    Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    Rcpp::traits::input_parameter< int >::type work(workSEXP);
-    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
-    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
-    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
-    Rcpp::traits::input_parameter< double >::type svtol(svtolSEXP);
-    rcpp_result_gen = Rcpp::wrap(extra_irlba_crossprod_cpp(x, y, k, work, maxit, tol, eps, svtol));
-    return rcpp_result_gen;
-END_RCPP
-}
-// extra_irlba_cpp
-Rcpp::List extra_irlba_cpp(const arma::mat& x, int k, int work, int maxit, double tol, double eps, double svtol);
-RcppExport SEXP _fastPLSextra_extra_irlba_cpp(SEXP xSEXP, SEXP kSEXP, SEXP workSEXP, SEXP maxitSEXP, SEXP tolSEXP, SEXP epsSEXP, SEXP svtolSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type x(xSEXP);
-    Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    Rcpp::traits::input_parameter< int >::type work(workSEXP);
-    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
-    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
-    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
-    Rcpp::traits::input_parameter< double >::type svtol(svtolSEXP);
-    rcpp_result_gen = Rcpp::wrap(extra_irlba_cpp(x, k, work, maxit, tol, eps, svtol));
-    return rcpp_result_gen;
-END_RCPP
-}
 // extra_pls_cpp
 Rcpp::List extra_pls_cpp(const arma::mat& x, const arma::mat& y, arma::ivec components, std::string method, int scaling, bool fitted);
 RcppExport SEXP _fastPLSextra_extra_pls_cpp(SEXP xSEXP, SEXP ySEXP, SEXP componentsSEXP, SEXP methodSEXP, SEXP scalingSEXP, SEXP fittedSEXP) {
@@ -76,8 +41,6 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_fastPLSextra_extra_irlba_crossprod_cpp", (DL_FUNC) &_fastPLSextra_extra_irlba_crossprod_cpp, 8},
-    {"_fastPLSextra_extra_irlba_cpp", (DL_FUNC) &_fastPLSextra_extra_irlba_cpp, 7},
     {"_fastPLSextra_extra_pls_cpp", (DL_FUNC) &_fastPLSextra_extra_pls_cpp, 6},
     {"_fastPLSextra_extra_predict_cpp", (DL_FUNC) &_fastPLSextra_extra_predict_cpp, 2},
     {NULL, NULL, 0}

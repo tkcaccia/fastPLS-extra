@@ -4,11 +4,17 @@ This directory contains code that summarizes benchmark evidence, creates
 figures and tables, builds the manuscript and Supplementary Material, and runs
 notation/citation/layout audits.
 
-`build_current_09939_figures.R` reads numerical evidence from
-`FASTPLS_EVIDENCE_ROOT` and writes generated tables and figures below
-`FASTPLS_MANUSCRIPT_OUTPUT`. `build_current_09939_documents.py` reads those
-generated artifacts and writes DOCX files to the same external output tree.
-Neither tool reads results from or writes results to the `fastPLS` repository.
+`build_current_09939_figures.R` assembles the independent-implementation,
+backend, NMR and ImageNet figures from external result roots. The current NMR
+root must be supplied through `FASTPLS_CURRENT_NMR_ROOT`; this prevents older
+package-version measurements from entering Figure 3. Run
+`build_current_09940_evidence.R` afterwards to replace the general benchmark
+panels with the current-release evidence. It reads the independent R, IKPLS,
+nirs4all-methods and scikit-learn result tables and writes generated tables and
+figures to the external manuscript directory. Finally,
+`build_current_09939_documents.py` reads those artifacts and writes the DOCX
+files to that directory. None of these tools reads results from or writes
+results to the `fastPLS` repository.
 
 Generated output is intentionally absent from this repository until the
 package is frozen. The later evidence repository will contain the selected

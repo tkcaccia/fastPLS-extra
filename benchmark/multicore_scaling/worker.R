@@ -16,8 +16,8 @@ if (nzchar(benchmark_library)) {
 }
 suppressPackageStartupMessages(library(fastPLS))
 
-if (!identical(as.character(packageVersion("fastPLS")), "0.99.39")) {
-    stop("The multicore benchmark requires fastPLS 0.99.39.", call. = FALSE)
+if (!identical(as.character(packageVersion("fastPLS")), "0.99.40")) {
+    stop("The multicore benchmark requires fastPLS 0.99.40.", call. = FALSE)
 }
 
 options(backend = "cpu", cores = cores)

@@ -70,7 +70,22 @@ fastpls_lib <- Sys.getenv("FASTPLS_LIB", unset = "")
 if (nzchar(fastpls_lib)) {
   .libPaths(unique(c(fastpls_lib, .libPaths())))
 }
+fastpls_extra_lib <- Sys.getenv("FASTPLSEXTRA_LIB", unset = "")
+if (nzchar(fastpls_extra_lib)) {
+  .libPaths(unique(c(fastpls_extra_lib, .libPaths())))
+}
 suppressPackageStartupMessages(library(fastPLS))
+if (solver == "irlba") {
+  if (precision != "float64" || backend != "cpu") {
+    stop("The IRLBA NMR control requires CPU float64.", call. = FALSE)
+  }
+  if (!requireNamespace("fastPLSextra", quietly = TRUE)) {
+    stop(
+      "Install fastPLSextra or set FASTPLSEXTRA_LIB for the IRLBA control.",
+      call. = FALSE
+    )
+  }
+}
 if (backend == "cuda" && !isTRUE(has_cuda())) {
   stop("CUDA backend is unavailable.", call. = FALSE)
 }
@@ -185,45 +200,76 @@ for (replicate_id in seq_len(replicates)) {
   baseline_rss <- rss_mb()
   set.seed(seed)
   fit_arguments <- list(
-      Xtrain, Ytrain,
+    Xtrain, Ytrain,
     ncomp = ncomp,
     method = family,
-    backend = backend,
-    svd.method = solver,
-    scaling = "centering",
     fit = FALSE,
-    return_variance = FALSE,
     seed = seed
   )
-  if (!automatic_controls && solver == "rsvd") {
-    fit_arguments$oversample <- oversample
-    fit_arguments$power <- power
+  if (solver == "irlba") {
+    fit_arguments$scaling <- "center"
+  } else {
+    fit_arguments$backend <- backend
+    fit_arguments$svd.method <- "rsvd"
+    fit_arguments$scaling <- "centering"
+    fit_arguments$return_variance <- FALSE
+    if (!automatic_controls) {
+      fit_arguments$oversample <- oversample
+      fit_arguments$power <- power
+    }
   }
   mark_event(replicate_id, "fit_start")
   if (nzchar(profile_output)) Rprof(profile_output, interval = 0.005)
   fit_time <- tryCatch(unname(system.time({
-    model <- do.call(pls, fit_arguments)
+    model <- if (solver == "irlba") {
+      do.call(fastPLSextra::pls_irlba, fit_arguments)
+    } else {
+      do.call(pls, fit_arguments)
+    }
   })[["elapsed"]]), finally = {
     if (nzchar(profile_output)) Rprof(NULL)
   })
   mark_event(replicate_id, "fit_end")
   after_fit_rss <- rss_mb()
   predict_time <- unname(system.time({
-    prediction_object <- predict(model, Xtest, backend = backend)
+    prediction_object <- if (solver == "irlba") {
+      predict(model, Xtest)
+    } else {
+      predict(model, Xtest, backend = backend)
+    }
   })[["elapsed"]])
   mark_event(replicate_id, "predict_end")
-  prediction <- extract_prediction(prediction_object$Ypred, ncomp)
+  prediction_source <- if (solver == "irlba") {
+    prediction_object
+  } else {
+    prediction_object$Ypred
+  }
+  prediction <- extract_prediction(prediction_source, ncomp)
   if (!identical(dim(prediction), dim(Ytest))) {
     stop("Prediction dimensions do not match the held-out response.")
   }
   metrics <- regression_metrics(Ytest, prediction, training_mean)
   per_sample_rmsd <- sqrt(rowMeans((Ytest - prediction)^2))
-  diagnostics <- model$diagnostics
+  diagnostics <- if (solver == "irlba") {
+    list(
+      status = if (all(model$convergence$status == 0L)) "ok" else "failed",
+      convergence = model$convergence,
+      approximation_audited = NA
+    )
+  } else {
+    model$diagnostics
+  }
   rsvd_diagnostics <- diagnostics$rsvd %||% list()
   direction_diagnostics <- diagnostics$simpls_direction %||% list()
   rows[[replicate_id]] <- data.frame(
     dataset = "nmr",
     package_version = as.character(utils::packageVersion("fastPLS")),
+    solver_package = if (solver == "irlba") "fastPLSextra" else "fastPLS",
+    solver_package_version = if (solver == "irlba") {
+      as.character(utils::packageVersion("fastPLSextra"))
+    } else {
+      as.character(utils::packageVersion("fastPLS"))
+    },
     source_archive_sha256 = source_archive_sha256,
     input_sha256 = input_sha256,
     protocol_version = protocol$metadata$protocol_version,

@@ -223,6 +223,8 @@ find_dataset_rdata <- function(dataset_id) {
         file.path(home_dir, "Documents", "fastPLS", "data", one_fname),
         file.path(home_dir, "Documents", "fastPLS", "Data", one_fname),
         file.path(home_dir, "Documents", "GPUPLS", "Data", one_fname),
+        file.path(home_dir, "Documents", "GPUPLS", "Data", "metal_matched",
+                  one_fname),
         file.path(home_dir, "GPUPLS", "Data", one_fname)
       )
     }), use.names = FALSE)
@@ -330,6 +332,11 @@ load_embedded_list_task <- function(e, objs, dataset_id, split_seed) {
     if (!is.list(obj) || !all(c("data", "labels") %in% names(obj))) next
     X <- as_benchmark_matrix(obj$data)
     y <- safe_factor(obj$labels)
+    labelled <- !is.na(y)
+    if (!all(labelled)) {
+      X <- X[labelled, , drop = FALSE]
+      y <- droplevels(y[labelled])
+    }
     set.seed(as.integer(split_seed))
     sp <- make_stratified_split(y, train_frac = 0.5)
     return(list(
@@ -454,6 +461,11 @@ load_standard_task <- function(path, dataset_id, split_seed) {
   if (all(c("data", "labels") %in% objs)) {
     X <- as_benchmark_matrix(get("data", envir = e))
     y <- safe_factor(get("labels", envir = e))
+    labelled <- !is.na(y)
+    if (!all(labelled)) {
+      X <- X[labelled, , drop = FALSE]
+      y <- droplevels(y[labelled])
+    }
     sp <- make_stratified_split(y, train_frac = 0.5)
     return(list(
       dataset = dataset_id,

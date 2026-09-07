@@ -16,8 +16,10 @@ classification head, rSVD oversampling, power iterations, seed, timing scope,
 and execution status. PLS-SVD and standalone `fastsvd()` use 32 oversampling
 directions and five power iterations. Accelerated SIMPLS, OPLS, and kernel-PLS
 use 32 directions and five iterations for ordinary shapes. For a massive
-cross-covariance, the profile records `oversample = 12` and `power = 2` while
-executing one newly initialized rank-one randomized direction per component.
+cross-covariance, the profile records `oversample = 12` and `power = 1`.
+Component-wise routes use a newly initialized randomized direction at every
+deflation step; the bounded CUDA float32 route can instead refresh an
+independent candidate block before returning to component-wise calculations.
 Results from older package
 versions are not part of the publication evidence retained in this repository.
 
@@ -111,8 +113,10 @@ scripts/run_controlled_scaling.sh RESULTS_DIR qualification cuda 3
 - The ImageNet scripts assess float32 DINOv2 feature processing as an
   exploratory foundation-model embedding stress test. The manuscript reports
   this separately from biomedical predictive validation.
-- `ikpls_cross_language/` contains the matched cross-language comparison with
-  IKPLS, including the large float32 feasibility extension.
+- `ikpls_cross_language/` contains the matched comparison with IKPLS,
+  nirs4all-methods and scikit-learn, including guarded NMR and ImageNet
+  feasibility extensions. Estimators, native precision, warnings, failures
+  and retained-output contracts remain explicit.
 
 ## Provenance
 

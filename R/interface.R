@@ -35,37 +35,6 @@
     force(expression)
 }
 
-irlba <- function(x, ncomp, seed = 1L, work = 0L, maxit = 1000L,
-                  tol = 1e-5, eps = 1e-9, svtol = 1e-5) {
-    x <- .matrix(x, "x")
-    ncomp <- .integer(ncomp, "ncomp")
-    work <- .integer(work, "work", 0L)
-    maxit <- .integer(maxit, "maxit")
-    if (length(ncomp) != 1L || ncomp > min(dim(x)) ||
-        length(work) != 1L || length(maxit) != 1L) stop("Invalid solver dimensions")
-    tolerances <- c(tol, eps, svtol)
-    if (length(tolerances) != 3L || any(!is.finite(tolerances)) ||
-        any(tolerances < 0 | tolerances > 1)) stop("Invalid solver tolerances")
-    .with_seed(seed, extra_irlba_cpp(x, ncomp, work, maxit, tol, eps, svtol))
-}
-
-irlba_crossprod <- function(x, y, ncomp, seed = 1L, work = 0L,
-                            maxit = 1000L, tol = 1e-5, eps = 1e-9, svtol = 1e-5) {
-    x <- .matrix(x, "x")
-    y <- .matrix(y, "y")
-    ncomp <- .integer(ncomp, "ncomp")
-    work <- .integer(work, "work", 0L)
-    maxit <- .integer(maxit, "maxit")
-    if (nrow(x) != nrow(y) || length(ncomp) != 1L ||
-        ncomp > min(nrow(x), ncol(x), ncol(y)) || length(work) != 1L ||
-        length(maxit) != 1L) stop("Invalid cross-product dimensions")
-    tolerances <- c(tol, eps, svtol)
-    if (length(tolerances) != 3L || any(!is.finite(tolerances)) ||
-        any(tolerances < 0 | tolerances > 1)) stop("Invalid solver tolerances")
-    .with_seed(seed, extra_irlba_crossprod_cpp(x, y, ncomp,
-        work, maxit, tol, eps, svtol))
-}
-
 pls_irlba <- function(Xtrain, Ytrain, Xtest = NULL, ncomp = 2L,
                       method = c("simpls", "plssvd"),
                       scaling = c("center", "autoscale", "none"),
