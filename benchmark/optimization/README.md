@@ -23,6 +23,17 @@ retains failures, missing rows, and ambiguous matches; known cross-host timings
 are not converted into speedup ratios. A successful runner exit is not proof
 that every requested scientific measurement succeeded.
 
+## CIFAR-100 regression gate
+
+`run_cifar_matched_candidate.sh` runs the fixed float32 SIMPLS/rSVD workload
+in isolated processes. An optional sixth argument supplies a frozen result
+directory to `check_cifar_performance_gate.py`. The gate requires identical
+dataset, backend, precision, component count, rSVD controls, seed, algorithm
+variant, refresh block, accuracy, and prediction checksum. It also rejects a
+median total runtime more than 10% slower than the frozen same-host baseline.
+Use separate baselines for each machine and BLAS build. Benchmark outputs stay
+outside this repository; only the reusable runner and gate are versioned.
+
 ## Numerical replay without refitting references
 
 `replay_simpls.R` and `replay_opls_kernel.R` load only named data/preprocessing

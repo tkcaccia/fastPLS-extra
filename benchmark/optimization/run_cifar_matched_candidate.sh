@@ -6,6 +6,9 @@ LIBRARY=${2:?library directory required}
 TASK=${3:?CIFAR-100 task RDS required}
 OUTPUT=${4:?output directory required}
 WAIT_PID=${5:-}
+BASELINE=${6:-}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+WORKER="$SCRIPT_DIR/../ikpls_cross_language/worker_fastpls_public.R"
 
 if [[ -n "$WAIT_PID" ]]; then
     while kill -0 "$WAIT_PID" 2>/dev/null; do sleep 30; done
@@ -23,7 +26,7 @@ for backend in cpu cuda; do
     for replicate in $(seq 1 11); do
         while nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null |
                 grep -q '[0-9]'; do sleep 10; done
-        Rscript "$SOURCE/benchmark/ikpls_cross_language/worker_fastpls_public.R" \
+        Rscript "$WORKER" \
             "$TASK" "$LIBRARY" "$backend" "$replicate" \
             "$OUTPUT/${backend}_r${replicate}.csv"
     done
@@ -40,3 +43,9 @@ write.csv(x, file.path(args[[1L]], "raw.csv"), row.names = FALSE)
 write.csv(summary, file.path(args[[1L]], "summary.csv"), row.names = FALSE)
 print(summary, row.names = FALSE)
 RSCRIPT
+
+if [[ -n "$BASELINE" ]]; then
+    python3 "$SCRIPT_DIR/check_cifar_performance_gate.py" \
+        --candidate "$OUTPUT" \
+        --baseline "$BASELINE"
+fi
