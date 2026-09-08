@@ -115,20 +115,32 @@ def compare_backend(candidate, baseline, args):
             f"{baseline_checksum} to {candidate_checksum}"
         )
 
-    candidate_time = statistics.median(finite_values(candidate, "total_sec"))
-    baseline_time = statistics.median(finite_values(baseline, "total_sec"))
-    slowdown = candidate_time / baseline_time
-    if slowdown > args.max_slowdown:
-        raise SystemExit(
-            f"FAIL: median runtime regressed by {(slowdown - 1) * 100:.1f}% "
-            f"({baseline_time:.6g}s to {candidate_time:.6g}s)"
-        )
+    timings = {}
+    for field, maximum in (
+        ("fit_sec", args.max_fit_slowdown),
+        ("prediction_sec", args.max_prediction_slowdown),
+        ("total_sec", args.max_slowdown),
+    ):
+        candidate_time = statistics.median(finite_values(candidate, field))
+        baseline_time = statistics.median(finite_values(baseline, field))
+        slowdown = candidate_time / baseline_time
+        timings[field] = (candidate_time, baseline_time, slowdown)
+        if slowdown > maximum:
+            raise SystemExit(
+                f"FAIL: median {field} regressed by "
+                f"{(slowdown - 1) * 100:.1f}% "
+                f"({baseline_time:.6g}s to {candidate_time:.6g}s)"
+            )
+
+    candidate_time, baseline_time, slowdown = timings["total_sec"]
 
     print(
         "PASS: matched CIFAR-100 gate; "
         f"accuracy={candidate_accuracy:.6f}, checksum={candidate_checksum}, "
         f"median={candidate_time:.6g}s, baseline={baseline_time:.6g}s, "
-        f"ratio={slowdown:.3f}"
+        f"ratio={slowdown:.3f}; "
+        f"fit_ratio={timings['fit_sec'][2]:.3f}, "
+        f"prediction_ratio={timings['prediction_sec'][2]:.3f}"
     )
     print(
         "candidate source="
@@ -143,6 +155,8 @@ def main():
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument("--baseline", required=True, type=Path)
     parser.add_argument("--max-slowdown", type=float, default=1.10)
+    parser.add_argument("--max-fit-slowdown", type=float, default=1.10)
+    parser.add_argument("--max-prediction-slowdown", type=float, default=1.25)
     parser.add_argument("--accuracy-tolerance", type=float, default=1e-12)
     args = parser.parse_args()
 

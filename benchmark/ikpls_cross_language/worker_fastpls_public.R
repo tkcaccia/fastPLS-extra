@@ -25,6 +25,8 @@ library(fastPLS)
 `%||%` <- function(left, right) if (is.null(left)) right else left
 runtime <- Sys.info()
 external <- extSoftVersion()
+load_average_1m <- tryCatch(Sys.getloadavg()[[1L]], error = function(...) NA_real_)
+logical_cpus <- parallel::detectCores(logical = TRUE)
 source_commit <- Sys.getenv("FASTPLS_BENCH_SOURCE_COMMIT", NA_character_)
 source_dirty <- Sys.getenv("FASTPLS_BENCH_SOURCE_DIRTY", NA_character_)
 first_system_value <- function(command, arguments) {
@@ -112,6 +114,8 @@ utils::write.csv(data.frame(
   machine = unname(runtime[["machine"]]),
   cpu_model = cpu_model,
   physical_memory_bytes = physical_memory_bytes,
+  logical_cpus = logical_cpus,
+  load_average_1m = load_average_1m,
   r_version = paste(R.version$major, R.version$minor, sep = "."),
   r_platform = R.version$platform,
   r_blas = unname(external[["BLAS"]] %||% NA_character_),

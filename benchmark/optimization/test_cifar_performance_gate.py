@@ -35,6 +35,8 @@ def benchmark_row(host="test-host", total="1.0"):
         "effective_power": "5",
         "accuracy": "0.7087",
         "prediction_checksum": "3118083306",
+        "fit_sec": "0.8",
+        "prediction_sec": "0.2",
         "total_sec": total,
     }
 
@@ -146,6 +148,21 @@ class CifarPerformanceGateTest(unittest.TestCase):
             result = self.run_gate(candidate, baseline)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("backend set changed", result.stderr)
+
+    def test_fit_regression_cannot_hide_inside_total_time(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            baseline = root / "baseline.csv"
+            candidate = root / "candidate.csv"
+            baseline_row = benchmark_row(total="1.0")
+            candidate_row = benchmark_row(total="1.0")
+            candidate_row["fit_sec"] = "0.9"
+            candidate_row["prediction_sec"] = "0.1"
+            write_csv(baseline, [baseline_row])
+            write_csv(candidate, [candidate_row])
+            result = self.run_gate(candidate, baseline)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("median fit_sec regressed", result.stderr)
 
 
 if __name__ == "__main__":
