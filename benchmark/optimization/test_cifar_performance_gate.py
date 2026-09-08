@@ -18,9 +18,12 @@ def benchmark_row(host="test-host", total="1.0"):
         "host": host,
         "os": "Linux",
         "machine": "x86_64",
+        "cpu_model": "Test CPU",
+        "physical_memory_bytes": "34359738368",
         "r_version": "4.6.0",
         "r_platform": "x86_64-pc-linux-gnu",
         "r_blas": "/test/libblas.so",
+        "fastpls_cpu_backend": "OpenBLAS: test configuration",
         "ncomp": "50",
         "oversample": "32",
         "power": "5",
@@ -74,7 +77,7 @@ class CifarPerformanceGateTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("PASS: matched CIFAR-100 gate", result.stdout)
 
-    def test_environment_change_is_rejected(self):
+    def test_hostname_change_is_allowed(self):
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
             baseline = root / "baseline.csv"
@@ -82,8 +85,67 @@ class CifarPerformanceGateTest(unittest.TestCase):
             write_csv(baseline, [benchmark_row(host="host-a")])
             write_csv(candidate, [benchmark_row(host="host-b")])
             result = self.run_gate(candidate, baseline)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_cpu_model_change_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            baseline = root / "baseline.csv"
+            candidate = root / "candidate.csv"
+            baseline_row = benchmark_row()
+            candidate_row = benchmark_row()
+            candidate_row["cpu_model"] = "Different CPU"
+            write_csv(baseline, [baseline_row])
+            write_csv(candidate, [candidate_row])
+            result = self.run_gate(candidate, baseline)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("environment field host changed", result.stderr)
+            self.assertIn("environment field cpu_model changed", result.stderr)
+
+    def test_native_cpu_backend_change_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            baseline = root / "baseline.csv"
+            candidate = root / "candidate.csv"
+            baseline_row = benchmark_row()
+            candidate_row = benchmark_row()
+            candidate_row["fastpls_cpu_backend"] = "R BLAS"
+            write_csv(baseline, [baseline_row])
+            write_csv(candidate, [candidate_row])
+            result = self.run_gate(candidate, baseline)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "environment field fastpls_cpu_backend changed", result.stderr
+            )
+
+    def test_multiple_backends_are_checked_independently(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            baseline = root / "baseline.csv"
+            candidate = root / "candidate.csv"
+            cpu = benchmark_row()
+            cuda = benchmark_row()
+            cuda["backend"] = "cuda"
+            cuda["execution_route"] = "resident cuda"
+            write_csv(baseline, [cpu, cuda])
+            write_csv(candidate, [cpu, cuda])
+            result = self.run_gate(candidate, baseline)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.count("PASS: matched CIFAR-100 gate"), 2)
+
+    def test_backend_set_change_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            baseline = root / "baseline.csv"
+            candidate = root / "candidate.csv"
+            cpu = benchmark_row()
+            cuda = benchmark_row()
+            cuda["backend"] = "cuda"
+            cuda["execution_route"] = "resident cuda"
+            write_csv(baseline, [cpu, cuda])
+            write_csv(candidate, [cpu])
+            result = self.run_gate(candidate, baseline)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("backend set changed", result.stderr)
 
 
 if __name__ == "__main__":

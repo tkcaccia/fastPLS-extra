@@ -27,6 +27,37 @@ runtime <- Sys.info()
 external <- extSoftVersion()
 source_commit <- Sys.getenv("FASTPLS_BENCH_SOURCE_COMMIT", NA_character_)
 source_dirty <- Sys.getenv("FASTPLS_BENCH_SOURCE_DIRTY", NA_character_)
+first_system_value <- function(command, arguments) {
+  value <- tryCatch(
+    suppressWarnings(system2(command, arguments, stdout = TRUE, stderr = FALSE)),
+    error = function(...) character()
+  )
+  if (length(value) == 0L || !nzchar(value[[1L]])) NA_character_ else value[[1L]]
+}
+if (identical(runtime[["sysname"]], "Darwin")) {
+  cpu_model <- first_system_value("sysctl", c("-n", "machdep.cpu.brand_string"))
+  physical_memory_bytes <- first_system_value("sysctl", c("-n", "hw.memsize"))
+} else if (identical(runtime[["sysname"]], "Linux")) {
+  cpu_lines <- tryCatch(readLines("/proc/cpuinfo", warn = FALSE),
+                        error = function(...) character())
+  cpu_line <- grep("^model name[[:space:]]*:", cpu_lines, value = TRUE)
+  cpu_model <- if (length(cpu_line)) {
+    sub("^[^:]+:[[:space:]]*", "", cpu_line[[1L]])
+  } else {
+    NA_character_
+  }
+  memory_lines <- tryCatch(readLines("/proc/meminfo", warn = FALSE),
+                           error = function(...) character())
+  memory_line <- grep("^MemTotal:", memory_lines, value = TRUE)
+  physical_memory_bytes <- if (length(memory_line)) {
+    as.character(as.numeric(gsub("[^0-9]", "", memory_line[[1L]])) * 1024)
+  } else {
+    NA_character_
+  }
+} else {
+  cpu_model <- NA_character_
+  physical_memory_bytes <- NA_character_
+}
 precision <- match.arg(
   Sys.getenv("FASTPLS_BENCH_PRECISION", "float64"),
   c("float32", "float64")
@@ -79,9 +110,12 @@ utils::write.csv(data.frame(
   host = unname(runtime[["nodename"]]),
   os = unname(runtime[["sysname"]]),
   machine = unname(runtime[["machine"]]),
+  cpu_model = cpu_model,
+  physical_memory_bytes = physical_memory_bytes,
   r_version = paste(R.version$major, R.version$minor, sep = "."),
   r_platform = R.version$platform,
   r_blas = unname(external[["BLAS"]] %||% NA_character_),
+  fastpls_cpu_backend = fastPLS:::cpu_backend_description_cpp(),
   replicate = replicate_id,
   ncomp = ncomp,
   oversample = oversample,

@@ -26,12 +26,14 @@ PROTOCOL_FIELDS = (
 )
 
 ENVIRONMENT_FIELDS = (
-    "host",
     "os",
     "machine",
+    "cpu_model",
+    "physical_memory_bytes",
     "r_version",
     "r_platform",
     "r_blas",
+    "fastpls_cpu_backend",
 )
 
 
@@ -83,16 +85,7 @@ def compare_environment(candidate, baseline, field):
         )
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidate", required=True, type=Path)
-    parser.add_argument("--baseline", required=True, type=Path)
-    parser.add_argument("--max-slowdown", type=float, default=1.10)
-    parser.add_argument("--accuracy-tolerance", type=float, default=1e-12)
-    args = parser.parse_args()
-
-    candidate = read_rows(args.candidate)
-    baseline = read_rows(args.baseline)
+def compare_backend(candidate, baseline, args):
     for field in PROTOCOL_FIELDS:
         candidate_value = unique_value(candidate, field)
         baseline_value = unique_value(baseline, field)
@@ -143,6 +136,31 @@ def main():
         "baseline source="
         f"{unique_value(baseline, 'source_commit') or 'unknown'}"
     )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--candidate", required=True, type=Path)
+    parser.add_argument("--baseline", required=True, type=Path)
+    parser.add_argument("--max-slowdown", type=float, default=1.10)
+    parser.add_argument("--accuracy-tolerance", type=float, default=1e-12)
+    args = parser.parse_args()
+
+    candidate = read_rows(args.candidate)
+    baseline = read_rows(args.baseline)
+    candidate_backends = sorted({row.get("backend", "") for row in candidate})
+    baseline_backends = sorted({row.get("backend", "") for row in baseline})
+    if candidate_backends != baseline_backends:
+        raise SystemExit(
+            "FAIL: backend set changed from "
+            f"{baseline_backends!r} to {candidate_backends!r}"
+        )
+    for backend in candidate_backends:
+        compare_backend(
+            [row for row in candidate if row.get("backend", "") == backend],
+            [row for row in baseline if row.get("backend", "") == backend],
+            args,
+        )
 
 
 if __name__ == "__main__":
