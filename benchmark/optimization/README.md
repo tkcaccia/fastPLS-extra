@@ -28,11 +28,16 @@ that every requested scientific measurement succeeded.
 `run_cifar_matched_candidate.sh` runs the fixed float32 SIMPLS/rSVD workload
 in isolated processes. An optional sixth argument supplies a frozen result
 directory to `check_cifar_performance_gate.py`. The gate requires identical
-dataset, backend, precision, component count, rSVD controls, seed, algorithm
-variant, refresh block, accuracy, and prediction checksum. It also rejects a
+dataset, backend, precision, component count, requested and effective rSVD
+controls, seed, execution route, algorithm variant, refresh block, accuracy,
+and prediction checksum. It also verifies the host, operating system,
+architecture, R version, and R BLAS when those fields are available. The source
+commit and dirty-worktree state are recorded in every row. The gate rejects a
 median total runtime more than 10% slower than the frozen same-host baseline.
-Use separate baselines for each machine and BLAS build. Benchmark outputs stay
-outside this repository; only the reusable runner and gate are versioned.
+Use separate baselines for each machine and BLAS build. Set
+`FASTPLS_BENCH_BACKENDS=cpu`, `cpu metal`, or `cpu cuda` to restrict the tested
+backends. Benchmark outputs stay outside this repository; only the reusable
+runner and gate are versioned.
 
 ## Numerical replay without refitting references
 

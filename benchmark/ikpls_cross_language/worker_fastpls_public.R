@@ -23,6 +23,10 @@ if (anyNA(c(seed, oversample, power, ncomp))) {
 task <- readRDS(task_path)
 library(fastPLS)
 `%||%` <- function(left, right) if (is.null(left)) right else left
+runtime <- Sys.info()
+external <- extSoftVersion()
+source_commit <- Sys.getenv("FASTPLS_BENCH_SOURCE_COMMIT", NA_character_)
+source_dirty <- Sys.getenv("FASTPLS_BENCH_SOURCE_DIRTY", NA_character_)
 precision <- match.arg(
   Sys.getenv("FASTPLS_BENCH_PRECISION", "float64"),
   c("float32", "float64")
@@ -68,7 +72,16 @@ utils::write.csv(data.frame(
   dataset = task$dataset,
   backend = backend,
   precision = precision,
+  protocol_id = "cifar100_public_simpls_rsvd_v1",
   package_version = as.character(utils::packageVersion("fastPLS")),
+  source_commit = source_commit,
+  source_dirty = source_dirty,
+  host = unname(runtime[["nodename"]]),
+  os = unname(runtime[["sysname"]]),
+  machine = unname(runtime[["machine"]]),
+  r_version = paste(R.version$major, R.version$minor, sep = "."),
+  r_platform = R.version$platform,
+  r_blas = unname(external[["BLAS"]] %||% NA_character_),
   replicate = replicate_id,
   ncomp = ncomp,
   oversample = oversample,

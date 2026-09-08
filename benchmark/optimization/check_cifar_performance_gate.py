@@ -4,6 +4,7 @@
 import argparse
 import csv
 import math
+import re
 import statistics
 from pathlib import Path
 
@@ -12,17 +13,37 @@ PROTOCOL_FIELDS = (
     "dataset",
     "backend",
     "precision",
+    "protocol_id",
     "ncomp",
     "oversample",
     "power",
     "seed",
+    "execution_route",
     "algorithm_variant",
     "refresh_block",
+    "effective_oversample",
+    "effective_power",
+)
+
+ENVIRONMENT_FIELDS = (
+    "host",
+    "os",
+    "machine",
+    "r_version",
+    "r_platform",
+    "r_blas",
 )
 
 
 def read_rows(path: Path):
-    files = sorted(path.glob("*.csv")) if path.is_dir() else [path]
+    if path.is_dir():
+        worker_name = re.compile(r"^(cpu|cuda|metal)_r[0-9]+[.]csv$")
+        files = sorted(
+            item for item in path.glob("*.csv")
+            if worker_name.match(item.name)
+        )
+    else:
+        files = [path]
     rows = []
     for item in files:
         with item.open(newline="") as handle:
@@ -46,6 +67,22 @@ def finite_values(rows, field):
     return values
 
 
+def compare_environment(candidate, baseline, field):
+    candidate_values = {row.get(field, "") for row in candidate}
+    baseline_values = {row.get(field, "") for row in baseline}
+    if candidate_values == {""} or baseline_values == {""}:
+        return
+    if len(candidate_values) != 1 or len(baseline_values) != 1:
+        raise ValueError(f"{field} is not constant within a benchmark")
+    candidate_value = candidate_values.pop()
+    baseline_value = baseline_values.pop()
+    if candidate_value != baseline_value:
+        raise SystemExit(
+            f"FAIL: environment field {field} changed from "
+            f"{baseline_value!r} to {candidate_value!r}"
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", required=True, type=Path)
@@ -64,6 +101,8 @@ def main():
                 f"FAIL: protocol field {field} changed from "
                 f"{baseline_value!r} to {candidate_value!r}"
             )
+    for field in ENVIRONMENT_FIELDS:
+        compare_environment(candidate, baseline, field)
 
     candidate_accuracy = statistics.median(
         finite_values(candidate, "accuracy")
@@ -97,6 +136,12 @@ def main():
         f"accuracy={candidate_accuracy:.6f}, checksum={candidate_checksum}, "
         f"median={candidate_time:.6g}s, baseline={baseline_time:.6g}s, "
         f"ratio={slowdown:.3f}"
+    )
+    print(
+        "candidate source="
+        f"{unique_value(candidate, 'source_commit') or 'unknown'}; "
+        "baseline source="
+        f"{unique_value(baseline, 'source_commit') or 'unknown'}"
     )
 
 
