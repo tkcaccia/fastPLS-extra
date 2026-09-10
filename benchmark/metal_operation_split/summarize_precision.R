@@ -105,4 +105,3 @@ ggsave(paste0(stem, ".png"), figure, width = 10.2, height = 10.0,
     dpi = 320, bg = "white")
 ggsave(paste0(stem, ".pdf"), figure, width = 10.2, height = 10.0,
     device = cairo_pdf, bg = "white")
-

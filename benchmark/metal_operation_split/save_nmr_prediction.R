@@ -71,4 +71,3 @@ result <- list(
 )
 dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
 saveRDS(result, output, version = 3L)
-
