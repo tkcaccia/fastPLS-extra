@@ -74,12 +74,58 @@ for (index in seq_len(nrow(selection))) {
     if (task_type == "classification") {
         Ytrain_factor <- droplevels(as.factor(task$Ytrain))
         Ytest_factor <- factor(task$Ytest, levels = levels(Ytrain_factor))
-        if (anyNA(Ytest_factor)) {
-            stop("Held-out labels contain unseen classes for ", dataset, call. = FALSE)
+        if (length(Ytrain_factor) != nrow(Xtrain) ||
+            length(Ytest_factor) != nrow(Xtest) || anyNA(Ytrain_factor) ||
+            anyNA(Ytest_factor) ||
+            any(!nzchar(trimws(as.character(Ytrain_factor)))) ||
+            any(!nzchar(trimws(as.character(Ytest_factor))))) {
+            stop(
+                "Every exported sample must have one valid label for ",
+                dataset, "; no samples were removed.",
+                call. = FALSE
+            )
         }
         Ytrain <- stats::model.matrix(~ Ytrain_factor - 1L)
         Ytest <- matrix(as.integer(Ytest_factor) - 1L, ncol = 1L)
         class_count <- nlevels(Ytrain_factor)
+        if (identical(dataset, "tabula")) {
+            labels <- c(as.character(Ytrain_factor), as.character(Ytest_factor))
+            expected_counts <- c(
+                droplet_Bladder = 2500L, droplet_Heart_and_Aorta = 624L,
+                droplet_Kidney = 2777L, droplet_Limb_Muscle = 4536L,
+                droplet_Liver = 1845L, droplet_Lung = 5449L,
+                droplet_Mammary_Gland = 4478L, droplet_Marrow = 3651L,
+                droplet_Spleen = 9552L, droplet_Thymus = 1429L,
+                droplet_Tongue = 7537L, droplet_Trachea = 11269L,
+                facs_Aorta = 406L, facs_Bladder = 1355L,
+                facs_Brain_Myeloid = 4455L,
+                `facs_Brain_Non-Myeloid` = 3372L,
+                facs_Diaphragm = 870L, facs_Fat = 4955L,
+                facs_Heart = 4364L, facs_Kidney = 519L,
+                facs_Large_Intestine = 3708L, facs_Limb_Muscle = 1090L,
+                facs_Liver = 585L, facs_Lung = 1716L,
+                facs_Mammary_Gland = 2402L, facs_Marrow = 5021L,
+                facs_Pancreas = 1536L, facs_Skin = 2303L,
+                facs_Spleen = 1697L, facs_Thymus = 1349L,
+                facs_Tongue = 1402L, facs_Trachea = 1350L
+            )
+            observed_counts <- table(labels)
+            tabula_valid <- nrow(Xtrain) + nrow(Xtest) == 100102L &&
+                ncol(Xtrain) == 50L && class_count == 32L &&
+                !anyNA(Ytrain_factor) && !anyNA(Ytest_factor) && identical(
+                    as.integer(observed_counts[names(expected_counts)]),
+                    unname(expected_counts)
+                )
+            if (!tabula_valid) {
+                stop(
+                    paste(
+                        "Tabula Muris export requires the verified",
+                        "100,102-cell, 32-class PCA50 task."
+                    ),
+                    call. = FALSE
+                )
+            }
+        }
     } else {
         Ytrain <- as_double_matrix(task$Ytrain)
         Ytest <- as_double_matrix(task$Ytest)

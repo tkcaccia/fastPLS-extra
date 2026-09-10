@@ -14,6 +14,7 @@ suppressPackageStartupMessages(library(fastPLS))
 script_arg <- commandArgs()[grep("^--file=", commandArgs())]
 script_path <- normalizePath(sub("^--file=", "", script_arg[[1L]]))
 repo_dir <- normalizePath(file.path(dirname(script_path), ".."))
+source(file.path(repo_dir, "benchmark", "helpers_dataset_memory_compare.R"))
 worker <- file.path(
     repo_dir,
     "benchmark",
@@ -161,6 +162,7 @@ task_path <- function(dataset) {
 
 task_metadata <- lapply(datasets, function(dataset) {
     task <- readRDS(task_path(dataset))
+    task <- validate_publication_task(task, dataset)
     classification <- identical(task$task_type, "classification") ||
         is.factor(task$Ytrain) || is.character(task$Ytrain)
     q <- if (classification) {
@@ -210,6 +212,9 @@ component_grid <- function(dataset, method, metadata) {
     upper <- min(metadata$n_train - 1L, metadata$p)
     if (identical(method, "plssvd")) {
         upper <- min(upper, metadata$q)
+    }
+    if (identical(method, "opls")) {
+        upper <- upper - 1L
     }
     sort(unique(c(base_grids[[dataset]], selected_ncomp)))[
         sort(unique(c(base_grids[[dataset]], selected_ncomp))) <= upper

@@ -76,6 +76,7 @@ def main():
         Path.home() / "Documents/fastpls/data/Macosko2015_retina_float32.RData",
     ])
     tabula_path = first_existing([
+        Path.home() / "Documents/fastEmbedR/Data/TabulaMuris/TabulaMuris_float32.RData",
         Path.home() / "Documents/GPUPLS/Data/metal_matched/TabulaMuris_float32.RData",
         Path.home() / "Documents/fastpls/data/TabulaMuris_float32.RData",
     ])

@@ -66,6 +66,7 @@ current <- do.call(rbind, lapply(split(raw, keys), function(x) {
         ncomp = x$ncomp[[1L]],
         repetitions = nrow(x),
         precision = "float32",
+        workstation = "Intel Core i7-13700; 32 GiB RAM",
         stringsAsFactors = FALSE
     )
 }))
@@ -121,6 +122,7 @@ if (file.exists(python_summary_path)) {
         ncomp = python_summary$ncomp,
         repetitions = python_summary$repetitions,
         precision = python_summary$precision,
+        workstation = "Intel Core i7-13700; 32 GiB RAM",
         stringsAsFactors = FALSE
     )
     comparison <- comparison[
@@ -150,6 +152,7 @@ if (file.exists(python_large_path)) {
         na = ""
     )
 }
+comparison$workstation <- "Intel Core i7-13700; 32 GiB RAM"
 write.csv(comparison,
           file.path(tabdir, "figure1_independent_implementation_data.csv"),
           row.names = FALSE, na = "")
@@ -217,7 +220,8 @@ figure1 <- (p_accuracy / p_time / p_memory) +
         subtitle = paste(
             "fastPLS rows: SIMPLS-rSVD, centred float32 predictors,",
             "training-selected components, argmax or LDA;\n",
-            "oversampling 32, five power iterations, seed 123; one CPU thread."
+            "oversampling 32, five power iterations, seed 123; one CPU thread;",
+            "Intel Core i7-13700 workstation."
         )
     )
 save_plot(figure1, "figure1_independent_implementations", 9.4, 13.6)

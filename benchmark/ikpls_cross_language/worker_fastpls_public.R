@@ -16,6 +16,10 @@ seed <- as.integer(Sys.getenv("FASTPLS_BENCH_SEED", "123"))
 oversample <- as.integer(Sys.getenv("FASTPLS_BENCH_OVERSAMPLE", "32"))
 power <- as.integer(Sys.getenv("FASTPLS_BENCH_POWER", "5"))
 ncomp <- as.integer(Sys.getenv("FASTPLS_BENCH_NCOMP", "50"))
+method <- match.arg(
+  Sys.getenv("FASTPLS_BENCH_METHOD", "simpls"),
+  c("simpls", "plssvd", "opls", "kernelpls")
+)
 if (anyNA(c(seed, oversample, power, ncomp))) {
   stop("Benchmark controls must be integers")
 }
@@ -81,7 +85,7 @@ fit <- pls(
   task$Ytrain,
   ncomp = ncomp,
   scaling = "none",
-  method = "simpls",
+  method = method,
   svd.method = "rsvd",
   backend = backend,
   classifier = "argmax",
@@ -105,7 +109,7 @@ utils::write.csv(data.frame(
   dataset = task$dataset,
   backend = backend,
   precision = precision,
-  protocol_id = "cifar100_public_simpls_rsvd_v1",
+  protocol_id = paste0("cifar100_public_", method, "_rsvd_v1"),
   package_version = as.character(utils::packageVersion("fastPLS")),
   source_commit = source_commit,
   source_dirty = source_dirty,
@@ -122,6 +126,7 @@ utils::write.csv(data.frame(
   fastpls_cpu_backend = fastPLS:::cpu_backend_description_cpp(),
   replicate = replicate_id,
   ncomp = ncomp,
+  method = method,
   oversample = oversample,
   power = power,
   seed = seed,

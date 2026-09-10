@@ -1,10 +1,13 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 11L) {
+if (length(args) != 13L) {
     stop(paste(
         "Usage: selected_backend_worker.R LIB TASK FAMILY BACKEND NCOMP",
-        "REPLICATE OUTPUT READY GO SOURCE_ID PRECISION"
+        paste(
+            "REPLICATE OUTPUT READY GO SOURCE_ID PRECISION",
+            "EXPECTED_VERSION CLASSIFIER"
+        )
     ), call. = FALSE)
 }
 
@@ -19,6 +22,8 @@ ready <- args[[8L]]
 go <- args[[9L]]
 source_id <- args[[10L]]
 precision <- args[[11L]]
+expected_version <- args[[12L]]
+classifier <- match.arg(args[[13L]], c("argmax", "lda"))
 
 .libPaths(unique(c(library_path, .libPaths())))
 suppressPackageStartupMessages(library(fastPLS))
@@ -27,8 +32,11 @@ requested_library <- normalizePath(library_path, mustWork = TRUE)
 if (!startsWith(resolved_library, paste0(requested_library, .Platform$file.sep))) {
     stop("fastPLS was loaded outside the requested library", call. = FALSE)
 }
-if (!identical(as.character(packageVersion("fastPLS")), "0.99.40")) {
-    stop("selected backend benchmark requires fastPLS 0.99.40", call. = FALSE)
+if (!identical(as.character(packageVersion("fastPLS")), expected_version)) {
+    stop(
+        "selected backend benchmark requires fastPLS ", expected_version,
+        call. = FALSE
+    )
 }
 `%||%` <- function(left, right) {
     if (is.null(left) || !length(left)) right else left
@@ -38,6 +46,42 @@ task <- readRDS(task_path)
 required <- c("Xtrain", "Ytrain", "Xtest", "Ytest")
 if (!is.list(task) || !all(required %in% names(task))) {
     stop("Prepared task is missing a required matrix or response", call. = FALSE)
+}
+if (identical(task$dataset, "tabula")) {
+    labels <- c(as.character(task$Ytrain), as.character(task$Ytest))
+    expected_counts <- c(
+        droplet_Bladder = 2500L, droplet_Heart_and_Aorta = 624L,
+        droplet_Kidney = 2777L, droplet_Limb_Muscle = 4536L,
+        droplet_Liver = 1845L, droplet_Lung = 5449L,
+        droplet_Mammary_Gland = 4478L, droplet_Marrow = 3651L,
+        droplet_Spleen = 9552L, droplet_Thymus = 1429L,
+        droplet_Tongue = 7537L, droplet_Trachea = 11269L,
+        facs_Aorta = 406L, facs_Bladder = 1355L,
+        facs_Brain_Myeloid = 4455L, `facs_Brain_Non-Myeloid` = 3372L,
+        facs_Diaphragm = 870L, facs_Fat = 4955L, facs_Heart = 4364L,
+        facs_Kidney = 519L, facs_Large_Intestine = 3708L,
+        facs_Limb_Muscle = 1090L, facs_Liver = 585L, facs_Lung = 1716L,
+        facs_Mammary_Gland = 2402L, facs_Marrow = 5021L,
+        facs_Pancreas = 1536L, facs_Skin = 2303L, facs_Spleen = 1697L,
+        facs_Thymus = 1349L, facs_Tongue = 1402L,
+        facs_Trachea = 1350L
+    )
+    observed_counts <- table(labels)
+    tabula_valid <- length(labels) == 100102L && task$p == 50L &&
+        length(unique(labels)) == 32L && !anyNA(labels) &&
+        !any(!nzchar(trimws(labels))) && identical(
+            as.integer(observed_counts[names(expected_counts)]),
+            unname(expected_counts)
+        )
+    if (!tabula_valid) {
+        stop(
+            paste(
+                "Tabula Muris benchmark requires the verified",
+                "100,102-cell, 32-class PCA50 task."
+            ),
+            call. = FALSE
+        )
+    }
 }
 classification <- is.factor(task$Ytrain)
 to_float <- function(value) {
@@ -67,7 +111,7 @@ if (precision == "float32") {
 rss_mib <- function() {
     as.numeric(ps::ps_memory_info(ps::ps_handle())[["rss"]]) / 1024^2
 }
-gc(full = TRUE)
+invisible(gc(full = TRUE))
 writeLines(format(rss_mib(), digits = 15L), ready)
 while (!file.exists(go)) Sys.sleep(0.01)
 
@@ -77,7 +121,7 @@ fit_time <- system.time({
         ncomp = ncomp,
         method = family,
         backend = backend,
-        classifier = "argmax",
+        classifier = classifier,
         kernel = "linear",
         north = 1L,
         fit = FALSE,
@@ -105,7 +149,8 @@ if (classification) {
     metric_value <- sqrt(mean((as.matrix(prediction) - as.matrix(observed))^2))
 }
 internal <- attr(fit, "fastPLS_internal", exact = TRUE)
-controls <- fit$diagnostics$resident_controls
+controls <- fit$diagnostics$metal_operation_split
+if (is.null(controls)) controls <- fit$diagnostics$resident_controls
 if (is.null(controls)) controls <- fit$diagnostics$simpls
 if (is.null(controls)) controls <- fit$diagnostics$rsvd
 row <- data.frame(
@@ -116,6 +161,7 @@ row <- data.frame(
     family = family,
     backend = backend,
     precision = precision,
+    classifier = classifier,
     ncomp = ncomp,
     seed = 123L,
     replicate = replicate_id,

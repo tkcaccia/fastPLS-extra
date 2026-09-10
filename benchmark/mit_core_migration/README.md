@@ -19,12 +19,23 @@ fall back to CPU.
 ## CIFAR-100 benchmark
 
 `cifar_worker.R` performs one fresh-process SIMPLS/rSVD fit and held-out
-prediction at 50 components. `run_cifar_replicates.sh` repeats the worker and
-adds a replicate identifier to a local CSV result.
+prediction at 50 components. `run_cifar_replicates.sh` and
+`run_cifar_replicates.ps1` repeat the worker and add a replicate identifier to
+a local CSV result on Unix-like systems and Windows, respectively.
 
 ```sh
 ./run_cifar_replicates.sh \
     LIBRARY TASK_RDS cpu float32 11 /tmp/cifar-cpu.csv
+```
+
+```powershell
+.\run_cifar_replicates.ps1 `
+    -Library LIBRARY `
+    -TaskRds TASK_RDS `
+    -Backend cpu `
+    -Precision float32 `
+    -Replicates 11 `
+    -OutputCsv cifar-cpu.csv
 ```
 
 The input object must contain `Xtrain`, `Ytrain`, `Xtest`, and `Ytest`. Keep raw

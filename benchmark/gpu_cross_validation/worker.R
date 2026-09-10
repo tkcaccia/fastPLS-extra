@@ -92,6 +92,8 @@ seed <- as.integer(value("seed", "123"))
 method <- match.arg(value("method", "simpls"),
     c("plssvd", "simpls", "opls", "kernelpls"))
 classifier <- match.arg(value("classifier", "argmax"), c("argmax", "lda"))
+kernel <- match.arg(value("kernel", "linear"), c("linear", "rbf", "poly"))
+north <- as.integer(value("north", "1"))
 implementation <- value("implementation", "current")
 replicate <- as.integer(value("replicate", "1"))
 selection_metric <- value(
@@ -113,24 +115,29 @@ groups_preserved <- all(vapply(
 ))
 if (!groups_preserved) stop("Constraint groups were split across folds.")
 
+held_out <- test <- train <- NULL
+if (identical(workload, "one_fold")) {
+    held_out <- sort(unique(fold))[[1L]]
+    test <- which(fold == held_out)
+    train <- which(fold != held_out)
+}
+
 run_workload <- function() {
     if (identical(workload, "cv")) {
         return(pls.single.cv(
             X, Y, constrain = constrain, ncomp = ncomp, kfold = kfold,
             method = method, backend = backend, classifier = classifier,
-            fit = FALSE, seed = seed, selection_metric = selection_metric
+            kernel = kernel, north = north, fit = FALSE, seed = seed,
+            selection_metric = selection_metric
         ))
     }
-    held_out <- sort(unique(fold))[[1L]]
-    test <- which(fold == held_out)
-    train <- which(fold != held_out)
     pls(
         X[train, , drop = FALSE],
         if (classification) Y[train] else Y[train, , drop = FALSE],
         X[test, , drop = FALSE],
-        if (classification) Y[test] else Y[test, , drop = FALSE],
         ncomp = ncomp, method = method, backend = backend,
-        classifier = classifier, fit = FALSE, seed = seed,
+        classifier = classifier, kernel = kernel, north = north,
+        fit = FALSE, seed = seed,
         return_variance = FALSE
     )
 }
@@ -151,23 +158,6 @@ fingerprint <- function(object) {
     on.exit(unlink(path), add = TRUE)
     saveRDS(object, path, version = 3L)
     unname(tools::md5sum(path))
-}
-pls_test_metric <- function(result, metric) {
-    entries <- result$metrics$test
-    if (is.null(entries) || !length(entries)) return(numeric())
-    column <- switch(
-        tolower(metric),
-        rmsd = "RMSD",
-        rmse = "RMSE",
-        q2 = "Q2",
-        r2 = "R2",
-        metric
-    )
-    vapply(entries, function(entry) {
-        values <- entry$metrics
-        if (is.null(values) || !column %in% names(values)) return(NA_real_)
-        as.numeric(values[[column]][[1L]])
-    }, numeric(1L))
 }
 canonical_prediction <- function(object) {
     if (is.null(object)) return(NULL)
@@ -209,12 +199,32 @@ if (is.null(result)) {
         best_ncomp <- result$best_ncomp
         best_metric <- result$best_metric_value
     } else {
+        prediction <- result$Ypred[[length(result$Ypred)]]
         metric_values <- if (classification) {
-            result$accuracy
-        } else if (identical(tolower(selection_metric), "q2")) {
-            result$Q2Y
+            mean(as.character(prediction) == as.character(Y[test]))
         } else {
-            pls_test_metric(result, selection_metric)
+            observed <- if (inherits(Y, "float32")) {
+                float::dbl(Y[test, , drop = FALSE])
+            } else {
+                as.matrix(Y[test, , drop = FALSE])
+            }
+            predicted <- if (inherits(prediction, "float32")) {
+                float::dbl(prediction)
+            } else {
+                as.matrix(prediction)
+            }
+            if (identical(tolower(selection_metric), "q2")) {
+                training <- if (inherits(Y, "float32")) {
+                    float::dbl(Y[train, , drop = FALSE])
+                } else {
+                    as.matrix(Y[train, , drop = FALSE])
+                }
+                center <- colMeans(training)
+                1 - sum((observed - predicted)^2) /
+                    sum(sweep(observed, 2L, center, "-")^2)
+            } else {
+                sqrt(mean((observed - predicted)^2))
+            }
         }
         best_index <- if (
             classification || identical(tolower(selection_metric), "q2")
@@ -252,6 +262,8 @@ row <- data.frame(
     backend = backend,
     precision = precision,
     method = method,
+    kernel = if (identical(method, "kernelpls")) kernel else NA_character_,
+    north = if (identical(method, "opls")) north else NA_integer_,
     classifier = if (classification) classifier else NA_character_,
     n = nrow(X),
     p = ncol(X),

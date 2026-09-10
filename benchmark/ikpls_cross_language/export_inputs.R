@@ -20,9 +20,13 @@ write_dataset <- function(id, Xtrain, ytrain, Xtest, ytest, ncomp) {
   Xtest <- as.matrix(Xtest)
   ytrain <- droplevels(as.factor(ytrain))
   ytest <- factor(ytest, levels = levels(ytrain))
-  keep <- !is.na(ytest)
-  Xtest <- Xtest[keep, , drop = FALSE]
-  ytest <- droplevels(ytest[keep])
+  if (anyNA(ytest)) {
+    stop(
+      "Held-out labels contain classes absent from training for ", id,
+      "; no samples were removed.",
+      call. = FALSE
+    )
+  }
 
   x_mean <- colMeans(Xtrain)
   Xtrain <- sweep(Xtrain, 2L, x_mean, "-")

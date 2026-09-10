@@ -112,15 +112,19 @@ load_compare_task <- function(dataset_id, split_seed) {
     path <- find_dataset_rdata(dataset_id)
     task <- as_task(path, dataset_id = dataset_id, split_seed = split_seed)
   }
+  task <- validate_publication_task(task, dataset_id)
   precision <- tolower(Sys.getenv("FASTPLS_BENCH_PRECISION", "float64"))
   task <- coerce_task_precision(task, precision = precision)
   if (identical(task$task_type, "classification")) {
     task$Ytrain <- droplevels(as.factor(task$Ytrain))
     task$Ytest <- factor(task$Ytest, levels = levels(task$Ytrain))
-    keep <- !is.na(task$Ytest)
-    task$Xtest <- task$Xtest[keep, , drop = FALSE]
-    task$Ytest <- droplevels(task$Ytest[keep])
-    task$n_test <- nrow(task$Xtest)
+    if (anyNA(task$Ytest)) {
+      stop(
+        "Held-out labels contain classes absent from training for ",
+        dataset_id, "; no samples were removed.",
+        call. = FALSE
+      )
+    }
     task$n_classes <- nlevels(task$Ytrain)
   } else {
     task$Ytrain <- coerce_benchmark_matrix(task$Ytrain, precision)

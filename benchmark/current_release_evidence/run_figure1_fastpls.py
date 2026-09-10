@@ -81,8 +81,8 @@ def selected_components(path):
             family = row.get("family", row.get("method"))
             backend = row.get("backend", "cpu")
             component = row.get("ncomp", row.get("selected_ncomp"))
-            if family == "simpls" and backend == "cpu" and component:
-                selected[row["dataset"]] = int(component)
+            if family in {"simpls", "plssvd"} and backend == "cpu" and component:
+                selected[(row["dataset"], family)] = int(component)
     return selected
 
 
@@ -91,9 +91,12 @@ def main():
     parser.add_argument("--library", required=True)
     parser.add_argument("--selected-panel", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--package-version", required=True)
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--oversample", type=int, default=32)
     parser.add_argument("--power", type=int, default=5)
+    parser.add_argument("--methods", nargs="+", default=("simpls", "plssvd"),
+                        choices=("simpls", "plssvd"))
     parser.add_argument("--datasets", nargs="+", default=(
         "ccle", "cifar100", "gtex_v8", "metref", "retina", "tabula",
         "tcga_brca", "tcga_hnsc_methylation", "tcga_pan_cancer"
@@ -106,30 +109,35 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     records = []
     for dataset in args.datasets:
-        if dataset not in ncomp:
-            raise RuntimeError(f"missing SIMPLS component count for {dataset}")
-        for classifier in ("argmax", "lda"):
-            for replicate in range(1, args.repetitions + 1):
-                stem = f"{dataset}_{classifier}_r{replicate}"
-                output = work / f"{stem}.csv"
-                ready = work / f"{stem}.ready"
-                go = work / f"{stem}.go"
-                if output.exists():
-                    with output.open(newline="") as stream:
-                        existing = next(csv.DictReader(stream))
-                    if "peak_rss_mib" in existing:
-                        records.append(existing)
-                        continue
-                for path in (ready, go):
-                    if path.exists():
-                        path.unlink()
-                command = [
-                    "Rscript", str(root / "figure1_worker.R"), args.library,
-                    dataset, classifier, str(ncomp[dataset]), str(replicate),
-                    str(output), str(ready), str(go), str(args.oversample),
-                    str(args.power)
-                ]
-                records.append(run(command, ready, go, output))
+        for method in args.methods:
+            key = (dataset, method)
+            if key not in ncomp:
+                raise RuntimeError(
+                    f"missing {method} component count for {dataset}"
+                )
+            for classifier in ("argmax", "lda"):
+                for replicate in range(1, args.repetitions + 1):
+                    stem = f"{dataset}_{method}_{classifier}_r{replicate}"
+                    output = work / f"{stem}.csv"
+                    ready = work / f"{stem}.ready"
+                    go = work / f"{stem}.go"
+                    if output.exists():
+                        with output.open(newline="") as stream:
+                            existing = next(csv.DictReader(stream))
+                        if "peak_rss_mib" in existing:
+                            records.append(existing)
+                            continue
+                    for path in (ready, go):
+                        if path.exists():
+                            path.unlink()
+                    command = [
+                        "Rscript", str(root / "figure1_worker.R"), args.library,
+                        dataset, method, classifier, str(ncomp[key]),
+                        str(replicate), str(output), str(ready), str(go),
+                        str(args.oversample), str(args.power),
+                        args.package_version
+                    ]
+                    records.append(run(command, ready, go, output))
     with target.open("w", newline="") as stream:
         fieldnames = list(dict.fromkeys(
             key for record in records for key in record

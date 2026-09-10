@@ -14,6 +14,7 @@ suppressPackageStartupMessages(library(fastPLS))
 script_arg <- commandArgs()[grep("^--file=", commandArgs())]
 script_path <- normalizePath(sub("^--file=", "", script_arg[[1L]]))
 repo_dir <- normalizePath(file.path(dirname(script_path), ".."))
+source(file.path(repo_dir, "benchmark", "helpers_dataset_memory_compare.R"))
 worker <- file.path(repo_dir, "benchmark", "component_selection_worker.R")
 task_root <- normalizePath(
   Sys.getenv("FASTPLS_COMPONENT_TASK_ROOT", Sys.getenv("FASTPLS_DATA_ROOT")),
@@ -44,6 +45,15 @@ dataset_caps <- c(
 families <- c("plssvd", "simpls", "opls", "kernelpls")
 kfold <- as.integer(Sys.getenv("FASTPLS_COMPONENT_KFOLD", "10"))
 seed <- as.integer(Sys.getenv("FASTPLS_COMPONENT_SEED", "123"))
+component_precision <- tolower(Sys.getenv(
+  "FASTPLS_COMPONENT_PRECISION", "native"
+))
+if (!component_precision %in% c("native", "float32", "float64")) {
+  stop(
+    "FASTPLS_COMPONENT_PRECISION must be native, float32, or float64.",
+    call. = FALSE
+  )
+}
 dataset_filter <- Sys.getenv("FASTPLS_COMPONENT_DATASETS", "")
 if (nzchar(dataset_filter)) {
   requested <- trimws(strsplit(dataset_filter, ",", fixed = TRUE)[[1L]])
@@ -80,6 +90,7 @@ task_dimensions <- function(task) {
 
 make_config <- function(dataset, family) {
   task <- readRDS(task_path(dataset))
+  task <- validate_publication_task(task, dataset)
   dimensions <- task_dimensions(task)
   fold_train_limit <- floor(dimensions$n * (kfold - 1L) / kfold) - 1L
   family_limit <- min(dimensions$p, fold_train_limit)
@@ -109,7 +120,8 @@ make_config <- function(dataset, family) {
     intrinsic_limit = as.integer(family_limit),
     kfold = kfold,
     seed = seed,
-    selection_metric = if (dimensions$classification) "accuracy" else "rmsd"
+    selection_metric = if (dimensions$classification) "accuracy" else "rmsd",
+    precision = component_precision
   )
 }
 
@@ -180,6 +192,7 @@ writeLines(
     paste("task_root:", task_root),
     paste("kfold:", kfold),
     paste("seed:", seed),
+    paste("precision:", component_precision),
     "selection_data: training data only",
     "classification_metric: accuracy",
     "regression_metric: RMSD",

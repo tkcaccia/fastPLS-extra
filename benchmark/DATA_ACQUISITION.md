@@ -42,7 +42,7 @@ not alter an existing prepared benchmark object.
 
 ```sh
 Rscript benchmark/acquire_publication_datasets.R \
-  --dataset=cifar100,cbmc_citeseq,retina,metref,tabula,gtex_v8,tcga_brca,tcga_hnsc_methylation,tcga_pan_cancer \
+  --dataset=cifar100,cbmc_citeseq,retina,metref,gtex_v8,tcga_brca,tcga_hnsc_methylation,tcga_pan_cancer \
   --out="$HOME/fastPLS_sources"
 ```
 
@@ -57,9 +57,13 @@ Dataset-specific sources are:
 - **MetRef:** the `MetRef` object distributed by KODAMA. The benchmark removes
   zero-sum variables and applies the documented KODAMA normalization and
   scaling functions.
-- **Tabula Muris:** Bioconductor ExperimentHub record EH1617
-  (`TabulaMurisDroplet`), followed by the documented normalization, variable
-  selection, and PCA50 preprocessing.
+- **Tabula Muris:** the merged droplet and FACS legacy Seurat objects from the
+  [Tabula Muris Figshare release](https://doi.org/10.6084/m9.figshare.5821263.v1).
+  After cell-level quality control, library-size normalization, log1p
+  transformation, selection of 2,000 variable genes, scaling, and PCA50, the
+  verified benchmark contains 100,102 cells, 50 predictors, and 32 tissue
+  labels. `FASTPLS_TABULA_RDATA` must identify this prepared object; the
+  benchmark rejects droplet-only or incomplete-label substitutes.
 - **GTEx v8:** open-access GTEx gene-level expression and phenotype data from
   UCSC Xena. Protected sequence and donor-level files are not used.
 - **TCGA-BRCA, TCGA-HNSC methylation, and TCGA Pan-Cancer:** open-access

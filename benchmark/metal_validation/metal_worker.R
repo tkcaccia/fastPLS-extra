@@ -298,6 +298,7 @@ tryCatch({
       }
     )
   })[["elapsed"]]
+  metal_diagnostics <- fit$diagnostics$metal_operation_split
   rsvd_diagnostics <- fit$diagnostics$rsvd
   if (!is.null(rsvd_diagnostics)) {
     if (!is.null(rsvd_diagnostics$control_profile)) {
@@ -308,6 +309,14 @@ tryCatch({
     }
     if (!is.null(rsvd_diagnostics$power)) {
       out$power <- rsvd_diagnostics$power
+    }
+  }
+  if (!is.null(metal_diagnostics)) {
+    if (!is.null(metal_diagnostics$effective_oversample)) {
+      out$oversample <- metal_diagnostics$effective_oversample
+    }
+    if (!is.null(metal_diagnostics$effective_power)) {
+      out$power <- metal_diagnostics$effective_power
     }
   }
   direction_diagnostics <- fit$diagnostics$simpls_direction
@@ -359,14 +368,16 @@ tryCatch({
       resident_controls$implicit_crosscovariance
     )
   }
-  out$execution_route <- if (!is.null(internal$execution_route)) {
+  out$execution_route <- if (!is.null(fit$diagnostics$residency$route)) {
+    as.character(fit$diagnostics$residency$route)
+  } else if (!is.null(internal$execution_route)) {
     as.character(internal$execution_route)
   } else if (
     identical(cfg$backend, "metal") && isTRUE(out$host_assisted_components)
   ) {
-    "host-assisted Metal"
+    "Metal operation split"
   } else if (identical(cfg$backend, "metal")) {
-    "hybrid Metal"
+    "Metal operation split"
   } else if (identical(cfg$backend, "cuda")) {
     "CUDA"
   } else {

@@ -72,9 +72,12 @@ if (!identical(task$task_type, "classification")) {
 }
 Ytrain <- droplevels(as.factor(Ytrain))
 Ytest <- factor(Ytest, levels = levels(Ytrain))
-keep <- !is.na(Ytest)
-Xtest <- Xtest[keep, , drop = FALSE]
-Ytest <- droplevels(Ytest[keep])
+if (anyNA(Ytest)) {
+  stop(
+    "Held-out labels contain classes absent from training; no samples were removed.",
+    call. = FALSE
+  )
+}
 class_levels <- levels(Ytrain)
 Ydummy <- stats::model.matrix(~ Ytrain - 1)
 colnames(Ydummy) <- class_levels

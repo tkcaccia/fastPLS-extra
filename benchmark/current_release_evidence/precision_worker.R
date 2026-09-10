@@ -23,8 +23,8 @@ go <- args[[12L]]
 
 .libPaths(c(lib, .libPaths()))
 suppressPackageStartupMessages(library(fastPLS))
-if (!identical(as.character(packageVersion("fastPLS")), "0.99.40")) {
-    stop("precision benchmark requires fastPLS 0.99.40", call. = FALSE)
+if (!identical(as.character(packageVersion("fastPLS")), "0.99.42")) {
+    stop("precision benchmark requires fastPLS 0.99.42", call. = FALSE)
 }
 
 `%||%` <- function(x, y) {

@@ -25,12 +25,57 @@ as_double_matrix <- function(value) {
   as.matrix(value)
 }
 
+coerce_input_matrix <- function(value, precision) {
+  if (identical(precision, "native")) return(value)
+  if (identical(precision, "float32")) {
+    if (inherits(value, "float32")) return(value)
+    return(float::fl(as.matrix(value)))
+  }
+  as_double_matrix(value)
+}
+
 task <- readRDS(config$task_path)
-X <- as_double_matrix(task$Xtrain)
+if (identical(config$dataset, "tabula")) {
+  labels <- c(as.character(task$Ytrain), as.character(task$Ytest))
+  expected_counts <- c(
+    droplet_Bladder = 2500L, droplet_Heart_and_Aorta = 624L,
+    droplet_Kidney = 2777L, droplet_Limb_Muscle = 4536L,
+    droplet_Liver = 1845L, droplet_Lung = 5449L,
+    droplet_Mammary_Gland = 4478L, droplet_Marrow = 3651L,
+    droplet_Spleen = 9552L, droplet_Thymus = 1429L,
+    droplet_Tongue = 7537L, droplet_Trachea = 11269L,
+    facs_Aorta = 406L, facs_Bladder = 1355L,
+    facs_Brain_Myeloid = 4455L, `facs_Brain_Non-Myeloid` = 3372L,
+    facs_Diaphragm = 870L, facs_Fat = 4955L, facs_Heart = 4364L,
+    facs_Kidney = 519L, facs_Large_Intestine = 3708L,
+    facs_Limb_Muscle = 1090L, facs_Liver = 585L, facs_Lung = 1716L,
+    facs_Mammary_Gland = 2402L, facs_Marrow = 5021L,
+    facs_Pancreas = 1536L, facs_Skin = 2303L, facs_Spleen = 1697L,
+    facs_Thymus = 1349L, facs_Tongue = 1402L, facs_Trachea = 1350L
+  )
+  observed_counts <- table(labels)
+  tabula_valid <- length(labels) == 100102L && task$p == 50L &&
+    length(unique(labels)) == 32L && !anyNA(labels) &&
+    !any(!nzchar(trimws(labels))) && identical(
+      as.integer(observed_counts[names(expected_counts)]),
+      unname(expected_counts)
+    )
+  if (!tabula_valid) {
+    stop(
+      paste(
+        "Tabula Muris component selection requires the verified",
+        "100,102-cell, 32-class PCA50 task."
+      ),
+      call. = FALSE
+    )
+  }
+}
+precision <- config$precision %||% "native"
+X <- coerce_input_matrix(task$Xtrain, precision)
 Y <- task$Ytrain
 classification <- is.factor(Y) || is.character(Y)
 if (!classification) {
-  Y <- as_double_matrix(Y)
+  Y <- coerce_input_matrix(Y, precision)
 }
 
 package_version <- as.character(packageVersion("fastPLS"))
@@ -48,6 +93,7 @@ row <- data.frame(
   selection_status = "failed",
   kfold = config$kfold,
   seed = config$seed,
+  precision = if (inherits(X, "float32")) "float32" else "float64",
   control_profile = NA_character_,
   oversample = NA_integer_,
   power = NA_integer_,

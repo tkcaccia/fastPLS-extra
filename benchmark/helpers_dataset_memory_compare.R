@@ -218,6 +218,8 @@ find_dataset_rdata <- function(dataset_id) {
     Sys.getenv(env_name, ""),
     unlist(lapply(fnames, function(one_fname) {
       c(
+        file.path(home_dir, "Documents", "fastEmbedR", "Data",
+                  "TabulaMuris", one_fname),
         file.path(home_dir, "Documents", "Rdatasets", one_fname),
         file.path(home_dir, "Documents", "fastpls", "data", one_fname),
         file.path(home_dir, "Documents", "fastPLS", "data", one_fname),
@@ -325,18 +327,124 @@ safe_factor <- function(y) {
   droplevels(factor(y))
 }
 
+validate_label_vector <- function(X, y, dataset_id, partition) {
+  if (inherits(X, "float32") &&
+      !requireNamespace("float", quietly = TRUE)) {
+    stop(
+      "The float package is required to validate float32 predictors for ",
+      dataset_id, ".",
+      call. = FALSE
+    )
+  }
+  sample_count <- nrow(X)
+  if (is.null(sample_count) || length(sample_count) != 1L) {
+    stop(
+      "Could not determine the number of predictor rows for ", dataset_id,
+      " (", partition, ").",
+      call. = FALSE
+    )
+  }
+  if (length(y) != sample_count) {
+    stop(
+      "Predictor rows and labels differ for ", dataset_id, " (", partition,
+      "): ", sample_count, " rows versus ", length(y), " labels.",
+      call. = FALSE
+    )
+  }
+  label_text <- as.character(y)
+  missing <- is.na(y)
+  blank <- !missing & !nzchar(trimws(label_text))
+  if (any(missing) || any(blank)) {
+    stop(
+      "Every benchmark sample must have a label for ", dataset_id, " (",
+      partition, "). Found ", sum(missing), " missing and ", sum(blank),
+      " blank labels; no rows were removed.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+validate_classification_task <- function(task, dataset_id) {
+  if (!identical(task$task_type, "classification")) return(task)
+  validate_label_vector(task$Xtrain, task$Ytrain, dataset_id, "training")
+  validate_label_vector(task$Xtest, task$Ytest, dataset_id, "test")
+  unseen <- setdiff(
+    unique(as.character(task$Ytest)),
+    unique(as.character(task$Ytrain))
+  )
+  if (length(unseen)) {
+    stop(
+      "Held-out labels contain classes absent from training for ", dataset_id,
+      ": ", paste(unseen, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  task
+}
+
+validate_publication_task <- function(task, dataset_id) {
+  task <- validate_classification_task(task, dataset_id)
+  if (!identical(tolower(dataset_id), "tabula")) return(task)
+
+  y_train <- as.character(task$Ytrain)
+  y_test <- as.character(task$Ytest)
+  expected_counts <- c(
+    droplet_Bladder = 2500L, droplet_Heart_and_Aorta = 624L,
+    droplet_Kidney = 2777L, droplet_Limb_Muscle = 4536L,
+    droplet_Liver = 1845L, droplet_Lung = 5449L,
+    droplet_Mammary_Gland = 4478L, droplet_Marrow = 3651L,
+    droplet_Spleen = 9552L, droplet_Thymus = 1429L,
+    droplet_Tongue = 7537L, droplet_Trachea = 11269L,
+    facs_Aorta = 406L, facs_Bladder = 1355L,
+    facs_Brain_Myeloid = 4455L, `facs_Brain_Non-Myeloid` = 3372L,
+    facs_Diaphragm = 870L, facs_Fat = 4955L, facs_Heart = 4364L,
+    facs_Kidney = 519L, facs_Large_Intestine = 3708L,
+    facs_Limb_Muscle = 1090L, facs_Liver = 585L, facs_Lung = 1716L,
+    facs_Mammary_Gland = 2402L, facs_Marrow = 5021L,
+    facs_Pancreas = 1536L, facs_Skin = 2303L, facs_Spleen = 1697L,
+    facs_Thymus = 1349L, facs_Tongue = 1402L, facs_Trachea = 1350L
+  )
+  observed_counts <- table(c(y_train, y_test))
+  observed_rows <- length(y_train) + length(y_test)
+  observed_classes <- length(unique(c(y_train, y_test)))
+  observed_p <- as.integer(task$p %||% ncol(task$Xtrain))
+  has_missing <- anyNA(y_train) || anyNA(y_test)
+  has_blank <- any(!nzchar(trimws(c(y_train, y_test))))
+  valid <- identical(observed_rows, 100102L) &&
+    identical(observed_classes, 32L) &&
+    identical(observed_p, 50L) &&
+    identical(
+      as.integer(observed_counts[names(expected_counts)]),
+      unname(expected_counts)
+    ) &&
+    !has_missing && !has_blank
+  if (!valid) {
+    stop(
+      paste0(
+        "The Tabula Muris publication benchmark requires the merged ",
+        "100,102-cell, 32-class PCA50 object with complete labels. ",
+        "Observed rows=", observed_rows,
+        ", classes=", observed_classes,
+        ", predictors=", observed_p,
+        ", missing_labels=", has_missing,
+        ", blank_labels=", has_blank,
+        ". Set FASTPLS_TABULA_RDATA to the verified dataset file."
+      ),
+      call. = FALSE
+    )
+  }
+  task
+}
+
 load_embedded_list_task <- function(e, objs, dataset_id, split_seed) {
   candidates <- intersect(c("dataset_float32", "dataset"), objs)
   for (nm in candidates) {
     obj <- get(nm, envir = e)
     if (!is.list(obj) || !all(c("data", "labels") %in% names(obj))) next
     X <- as_benchmark_matrix(obj$data)
+    validate_label_vector(X, obj$labels, dataset_id, "source")
     y <- safe_factor(obj$labels)
-    labelled <- !is.na(y)
-    if (!all(labelled)) {
-      X <- X[labelled, , drop = FALSE]
-      y <- droplevels(y[labelled])
-    }
     set.seed(as.integer(split_seed))
     sp <- make_stratified_split(y, train_frac = 0.5)
     return(list(
@@ -460,12 +568,9 @@ load_standard_task <- function(path, dataset_id, split_seed) {
 
   if (all(c("data", "labels") %in% objs)) {
     X <- as_benchmark_matrix(get("data", envir = e))
-    y <- safe_factor(get("labels", envir = e))
-    labelled <- !is.na(y)
-    if (!all(labelled)) {
-      X <- X[labelled, , drop = FALSE]
-      y <- droplevels(y[labelled])
-    }
+    source_labels <- get("labels", envir = e)
+    validate_label_vector(X, source_labels, dataset_id, "source")
+    y <- safe_factor(source_labels)
     sp <- make_stratified_split(y, train_frac = 0.5)
     return(list(
       dataset = dataset_id,
@@ -486,7 +591,7 @@ load_standard_task <- function(path, dataset_id, split_seed) {
   stop("Unsupported standard task format: ", path)
 }
 
-as_task <- function(path, dataset_id, split_seed = 123L) {
+.as_task_unvalidated <- function(path, dataset_id, split_seed = 123L) {
   dataset_id <- tolower(dataset_id)
   if (dataset_id %in% c("cifar100", "ccle", "gtex_v8", "prism", "cbmc_citeseq", "retina", "tabula", "tcga_brca", "tcga_hnsc_methylation", "tcga_pan_cancer")) {
     return(load_standard_task(path, dataset_id = dataset_id, split_seed = split_seed))
@@ -682,6 +787,11 @@ as_task <- function(path, dataset_id, split_seed = 123L) {
   }
 
   stop("Unsupported dataset format for ", dataset_id)
+}
+
+as_task <- function(path, dataset_id, split_seed = 123L) {
+  task <- .as_task_unvalidated(path, dataset_id, split_seed)
+  validate_publication_task(task, dataset_id)
 }
 
 benchmark_gpu_backend <- function() {

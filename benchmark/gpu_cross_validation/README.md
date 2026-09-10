@@ -17,14 +17,14 @@ sharing a constraint value must never occur in different folds.
 
 ## Current implementation audit
 
-The current CUDA and Metal routes execute each fold model and its prediction on
-the requested accelerator, but fold orchestration remains on the host. Each
-fold currently:
+Fold orchestration remains on the host. CUDA executes each fold model and its
+prediction on device. Metal uses the same fixed operation-level CPU/Metal split
+as ordinary fitting. Each fold currently:
 
 1. constructs training and test row subsets on the host;
-2. creates a new resident accelerator model and its handles/workspaces;
-3. transfers the fold training data;
-4. transfers the test fold for prediction; and
+2. initializes the backend handles and reusable workspaces;
+3. transfers or exposes the fold training data to the selected operations;
+4. prepares the test fold for prediction; and
 5. returns predictions or score paths for host-side aggregation.
 
 Component-path prediction has an ablation mode because repeated projection of
@@ -33,21 +33,22 @@ test fold once and evaluates all requested component prefixes from the shared
 scores. This optimization does not alter folds, model controls, predictions,
 or public arguments.
 
-## Fully native target
+## Cross-validation optimization target
 
-A fully GPU-native CV engine is feasible, but requires a reusable CV workspace
-rather than a dispatch change. The target implementation will upload `X`, the
-response or compact labels, and the fixed fold vector once. It will then:
+A fully GPU-native CUDA CV engine and a fixed operation-split Metal CV engine
+require reusable CV workspaces rather than a dispatch change. The target
+implementation will upload or expose `X`, the response or compact labels, and
+the fixed fold vector once. It will then:
 
 - derive fold-specific sums, means, scales, cross-covariances, and, where
   useful, predictor cross-products on device;
 - obtain training sufficient statistics by subtracting held-out-fold moments
   from full-data moments;
-- reuse CUDA or Metal handles, random-state objects, and workspaces across
-  folds;
+- reuse CUDA handles or Metal/CPU operation-split workspaces, random-state
+  objects, and buffers across folds;
 - evaluate all requested component prefixes incrementally;
 - fit argmax or LDA and reduce accuracy, balanced accuracy, Q2, and RMSD on
-  device; and
+  the backend-specific execution route; and
 - return only the documented prediction/score paths and aggregate metrics.
 
 Host-side fold construction is retained because it is negligible, deterministic,
@@ -87,32 +88,21 @@ changing fold construction or group constraints.
 
 ## Current audit results
 
-The September 2026 audit used float32 SIMPLS-rSVD, ten folds, fixed fold
-assignments, and the public score-returning contract. Results remain outside
-Git and are summarized here only to document the benchmark interpretation.
+The September 2026 selected-component audit used float32 inputs, ten fixed
+folds, five fresh-process repetitions, and all four PLS families on 11
+datasets. The Mac panel contained 880/880 successful CPU and Metal workers.
+The fixed Metal operation split was not faster than the paired Mac CPU route
+in these cold-process cross-validation measurements: CPU/Metal ratios ranged
+from 0.214 to 0.992. This is retained as a negative result rather than hidden.
+The maximum CPU/Metal accuracy difference was 2.0e-5, and the maximum relative
+RMSD difference was 3.1e-6.
 
-| Dataset | Backend | Complete CV (s) | One fold (s) | CV / one fold | Same-host CPU / accelerator |
-|---|---:|---:|---:|---:|---:|
-| MetRef | CUDA | 0.557 | 0.260 | 2.14 | 0.60 |
-| Retina | CUDA | 1.784 | 0.276 | 6.46 | 1.07 |
-| CIFAR-100 | CUDA | 8.115 | 0.358 | 22.67 | 5.59 |
-| NMR | CUDA | 44.553 | 2.539 | 17.55 | 1.94 |
-| MetRef | Metal | 0.681 | 0.112 | 6.08 | not measured |
-| Retina | Metal | 2.376 | 0.173 | 13.73 | 0.72 |
-| CIFAR-100 | Metal | 12.519 | 0.604 | 20.73 | 0.78 |
-| NMR | Metal | 61.513 | 3.368 | 18.26 | not measured |
-
-NMR is a single guarded feasibility probe; the other rows use three to seven
-fresh processes. NMR response metrics must not be compared between computers
-unless the same task object and preprocessing fingerprint are confirmed.
-
-Reusing one test-fold projection for every requested component prefix reduced
-Metal CV time by 23-24% in the grouped synthetic audit. CUDA gained 0-3%, which
-shows that repeated fold setup, allocation, and transfers dominate the
-remaining CUDA overhead. CUDA float32 predictions agreed with the original
-path to tolerance: score correlation was 1.0, relative score error was
-4.83e-5, LDA label agreement was 1.0, and argmax label agreement was 0.99972.
-The Metal audit produced identical fingerprints and metrics.
+The operation-split cross-validation implementation still reduced work
+relative to ten independently timed fits in 22 of 44 Metal cells. The analogous
+counts were 11 of 44 for Mac CPU, 15 of 44 for Linux CPU, and 32 of 44 for
+CUDA. These comparisons quantify complete public workflows, including
+out-of-fold prediction and score assembly; they are not decomposition-only
+benchmarks. Raw results and generated summaries remain outside Git.
 
 ## Usage
 
@@ -133,6 +123,50 @@ Summarize paired fresh-process rows with:
 Rscript benchmark/gpu_cross_validation/summarize.R \
   /path/outside/git/raw.csv /path/outside/git/summary.csv
 ```
+
+## Supplementary selected-component matrix
+
+`run_selected_matrix.R` runs all four fastPLS families at component counts
+already selected from training data. It executes complete cross-validation and
+one matched fold fit plus prediction for every backend and fresh-process
+replicate. The runner is resumable: an existing non-empty result CSV is not
+overwritten.
+
+```sh
+Rscript benchmark/gpu_cross_validation/run_selected_matrix.R \
+  --library=/path/to/fastPLS/library \
+  --tasks=/path/to/task_objects \
+  --selection=/path/to/component_selection_summary.csv \
+  --output=/path/outside/git/platform_results \
+  --backends=cpu,cuda \
+  --repetitions=5 --kfold=10 --seed=123 \
+  --precision=float32 --context-mode=cold
+```
+
+Run the same command with `--backends=cpu,metal` on Apple silicon. Combine the
+platform directories and create the two supplementary figures with:
+
+```sh
+Rscript benchmark/gpu_cross_validation/summarize_selected_matrix.R \
+  /path/to/linux_results /path/to/mac_results /path/to/summary
+Rscript benchmark/gpu_cross_validation/plot_selected_matrix.R \
+  /path/to/summary /path/to/figures
+Rscript benchmark/gpu_cross_validation/audit_selected_matrix.R \
+  /path/to/summary
+```
+
+The supplementary figures use cold fresh processes so first-call accelerator
+context creation, transfer, and synchronization are included consistently with
+the complete-workflow benchmark. The first figure reports the same-host
+CPU/accelerator cross-validation runtime ratio. The second reports `(K *
+one-fold fit-and-prediction time) / complete CV time`. Ratios above one favour
+the accelerator in the first figure and the complete CV implementation in the
+second. Held-out metrics for the standalone fold are calculated after the timed
+fit-and-prediction call. Raw and summarized results remain outside this Git
+repository.
+The audit requires all 1,760 platform cells, checks the five-repetition
+contract, confirms paired fold signatures and prediction stability, and writes
+the maximum observed CPU/accelerator metric differences.
 
 For a matched baseline/candidate ablation, use `run_matched_pair.sh`. It
 alternates the two installed libraries in fresh processes to reduce timing

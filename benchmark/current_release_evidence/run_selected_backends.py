@@ -118,8 +118,10 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--backends", nargs="+", required=True)
     parser.add_argument("--precision", default="float32")
+    parser.add_argument("--classifiers", nargs="+", default=("argmax",))
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--source-id", default="unrecorded")
+    parser.add_argument("--expected-version", required=True)
     parser.add_argument("--datasets", nargs="+")
     parser.add_argument(
         "--families", nargs="+",
@@ -141,24 +143,29 @@ def main():
         task = task_dir / f"{dataset}_task.rds"
         for family in args.families:
             ncomp = selected[(dataset, family)]
-            for backend in args.backends:
-                for replicate in range(1, args.repetitions + 1):
-                    stem = f"{dataset}_{family}_{backend}_r{replicate}"
-                    output = work / f"{stem}.csv"
-                    ready = work / f"{stem}.ready"
-                    go = work / f"{stem}.go"
-                    for path in (output, ready, go):
-                        if path.exists():
-                            path.unlink()
-                    command = [
-                        "Rscript", str(root / "selected_backend_worker.R"),
-                        args.library, str(task), family, backend, str(ncomp),
-                        str(replicate), str(output), str(ready), str(go),
-                        args.source_id, args.precision,
-                    ]
-                    records.append(monitor(
-                        command, ready, go, output, backend == "cuda"
-                    ))
+            for classifier in args.classifiers:
+                for backend in args.backends:
+                    for replicate in range(1, args.repetitions + 1):
+                        stem = (
+                            f"{dataset}_{family}_{classifier}_{backend}"
+                            f"_r{replicate}"
+                        )
+                        output = work / f"{stem}.csv"
+                        ready = work / f"{stem}.ready"
+                        go = work / f"{stem}.go"
+                        for path in (output, ready, go):
+                            if path.exists():
+                                path.unlink()
+                        command = [
+                            "Rscript", str(root / "selected_backend_worker.R"),
+                            args.library, str(task), family, backend,
+                            str(ncomp), str(replicate), str(output),
+                            str(ready), str(go), args.source_id,
+                            args.precision, args.expected_version, classifier,
+                        ]
+                        records.append(monitor(
+                            command, ready, go, output, backend == "cuda"
+                        ))
     with target.open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(records[0]))
         writer.writeheader()

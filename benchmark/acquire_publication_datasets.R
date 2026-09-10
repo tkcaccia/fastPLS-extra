@@ -32,7 +32,7 @@ catalog <- data.frame(
     "public-package", "public-GEO", "public-download",
     "historical-release", "public-open-access", "gated-noncommercial",
     "source-study-terms", "release-controlled", "public-GEO",
-    "public-Bioconductor", "public-open-access", "public-open-access",
+    "public-download", "public-open-access", "public-open-access",
     "public-open-access"
   ),
   redistributed = FALSE,
@@ -205,25 +205,15 @@ acquire <- function(dataset) {
   }
 
   if (dataset == "tabula") {
-    if (!requireNamespace("ExperimentHub", quietly = TRUE)) {
-      stop(
-        "Install ExperimentHub and TabulaMurisData, then rerun: ",
-        "if (!requireNamespace('BiocManager')) install.packages('BiocManager'); ",
-        "BiocManager::install(c('ExperimentHub','TabulaMurisData'))"
-      )
-    }
-    if (dry_run) {
-      record(dataset, "Bioconductor ExperimentHub EH1617", "public-Bioconductor",
-             file.path(out, "EH1617_TabulaMurisDroplet.rds"),
-             "dry_run", "ExperimentHub object not resolved.")
-      return(invisible())
-    }
-    hub <- ExperimentHub::ExperimentHub()
-    object <- hub[["EH1617"]]
-    dest <- file.path(out, "EH1617_TabulaMurisDroplet.rds")
-    saveRDS(object, dest, compress = FALSE)
-    record(dataset, "Bioconductor ExperimentHub EH1617", "public-Bioconductor", dest)
-    return(dest)
+    return(require_local(
+      dataset,
+      "FASTPLS_TABULA_RDATA",
+      paste0(
+        "Tabula Muris Consortium legacy Seurat objects; ",
+        "https://doi.org/10.6084/m9.figshare.5821263.v1"
+      ),
+      "public-download"
+    ))
   }
 
   if (dataset == "gtex_v8") {

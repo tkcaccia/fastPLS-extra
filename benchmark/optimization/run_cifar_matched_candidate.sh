@@ -34,6 +34,7 @@ export FASTPLS_BENCH_OVERSAMPLE=32
 export FASTPLS_BENCH_POWER=5
 export FASTPLS_BENCH_SEED=123
 export FASTPLS_BENCH_PRECISION=${FASTPLS_BENCH_PRECISION:-float32}
+export FASTPLS_BENCH_METHOD=${FASTPLS_BENCH_METHOD:-simpls}
 for backend in $BACKENDS; do
     for replicate in $(seq 1 11); do
         if [[ "$backend" == "cuda" ]]; then
