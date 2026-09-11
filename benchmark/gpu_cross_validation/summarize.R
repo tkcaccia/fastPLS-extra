@@ -5,12 +5,22 @@ if (length(args) != 2L) {
     stop("Usage: summarize.R input.csv output.csv")
 }
 raw <- read.csv(args[[1L]], check.names = FALSE)
+if (!"fold_cache" %in% names(raw)) raw$fold_cache <- "on"
+if (!"numerical_prediction_signature" %in% names(raw)) {
+    raw$numerical_prediction_signature <- raw$prediction_signature
+}
 keys <- c(
     "package_version", "implementation", "task", "backend", "precision",
     "method", "classifier", "ncomp", "selection_metric", "data_scope",
-    "context_mode", "workload"
+    "context_mode", "workload", "fold_cache"
 )
-groups <- interaction(raw[keys], drop = TRUE, lex.order = TRUE)
+group_values <- raw[keys]
+group_values[] <- lapply(group_values, function(value) {
+    value <- as.character(value)
+    value[is.na(value)] <- "<NA>"
+    value
+})
+groups <- interaction(group_values, drop = TRUE, lex.order = TRUE)
 summaries <- lapply(split(raw, groups), function(part) {
     first <- part[1L, keys, drop = FALSE]
     cbind(
@@ -31,6 +41,9 @@ summaries <- lapply(split(raw, groups), function(part) {
             fold_signatures = length(unique(part$fold_signature)),
             prediction_signatures = length(unique(
                 part$prediction_signature[part$status == "ok"]
+            )),
+            numerical_prediction_signatures = length(unique(
+                part$numerical_prediction_signature[part$status == "ok"]
             )),
             statuses = paste(sort(unique(part$status)), collapse = ";"),
             errors = paste(unique(stats::na.omit(part$error)), collapse = "; "),

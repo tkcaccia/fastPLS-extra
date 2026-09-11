@@ -13,6 +13,10 @@ read_result <- function(path) {
     value <- read.csv(path, check.names = FALSE)
     value$source_file <- basename(path)
     if (!"workload" %in% names(value)) value$workload <- "cv"
+    if (!"fold_cache" %in% names(value)) value$fold_cache <- "on"
+    if (!"numerical_prediction_signature" %in% names(value)) {
+        value$numerical_prediction_signature <- value$prediction_signature
+    }
     value
 }
 
@@ -40,6 +44,7 @@ summarize_rows <- function(part) {
         method = part$method[[1L]],
         classifier = part$classifier[[1L]],
         workload = part$workload[[1L]],
+        fold_cache = part$fold_cache[[1L]],
         selection_metric = part$selection_metric[[1L]],
         folds = part$folds[[1L]],
         component_grid = part$ncomp[[1L]],
@@ -52,12 +57,21 @@ summarize_rows <- function(part) {
         metric_max = max(part$best_metric),
         fold_signatures = length(unique(part$fold_signature)),
         prediction_signatures = length(unique(part$prediction_signature)),
+        numerical_prediction_signatures = length(unique(
+            part$numerical_prediction_signature
+        )),
         groups_preserved = all(part$groups_preserved),
         stringsAsFactors = FALSE
     )
 }
 
-summary <- do.call(rbind, lapply(split(raw, raw$source_file), summarize_rows))
+summary_groups <- interaction(
+    raw$source_file,
+    raw$fold_cache,
+    drop = TRUE,
+    lex.order = TRUE
+)
+summary <- do.call(rbind, lapply(split(raw, summary_groups), summarize_rows))
 summary <- summary[order(summary$task, summary$backend,
                          summary$classifier, summary$workload), ]
 write.csv(
@@ -96,6 +110,29 @@ ablation <- do.call(rbind, lapply(c("metal", "cuda"), function(backend) {
                     unique(raw$prediction_signature[
                         grepl(paste0("^", prefix, "_(cv_)?candidate_", classifier),
                               raw$source_file)
+                    ])
+                ),
+            identical_numerical_prediction_signature =
+                baseline$numerical_prediction_signatures == 1L &&
+                candidate$numerical_prediction_signatures == 1L &&
+                identical(
+                    unique(raw$numerical_prediction_signature[
+                        grepl(
+                            paste0(
+                                "^", prefix,
+                                "_(cv_)?baseline_", classifier
+                            ),
+                            raw$source_file
+                        )
+                    ]),
+                    unique(raw$numerical_prediction_signature[
+                        grepl(
+                            paste0(
+                                "^", prefix,
+                                "_(cv_)?candidate_", classifier
+                            ),
+                            raw$source_file
+                        )
                     ])
                 ),
             stringsAsFactors = FALSE
@@ -141,6 +178,8 @@ comparison <- do.call(rbind, lapply(datasets, function(dataset) {
             metric_max = cv$metric_max,
             deterministic_folds = cv$fold_signatures == 1L,
             deterministic_predictions = cv$prediction_signatures == 1L,
+            numerically_stable_predictions =
+                cv$numerical_prediction_signatures == 1L,
             groups_preserved = cv$groups_preserved,
             stringsAsFactors = FALSE
         )

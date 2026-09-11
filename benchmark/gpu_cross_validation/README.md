@@ -17,46 +17,49 @@ sharing a constraint value must never occur in different folds.
 
 ## Current implementation audit
 
-Fold orchestration remains on the host. CUDA executes each fold model and its
-prediction on device. Metal uses the same fixed operation-level CPU/Metal split
-as ordinary fitting. Each fold currently:
+Fold assignment remains on the host because it is deterministic and preserves
+the public `constrain` semantics. The compiled CPU and Metal routes calculate
+eligible full-data sums, sums of squares, class sums, predictor-response
+products, and predictor Gram matrices once. Fold-training quantities are then
+recovered by subtracting the held-out contribution. Caches are bounded so an
+extreme response matrix, such as NMR, is not duplicated merely to avoid a
+matrix product.
 
-1. constructs training and test row subsets on the host;
-2. initializes the backend handles and reusable workspaces;
-3. transfers or exposes the fold training data to the selected operations;
-4. prepares the test fold for prediction; and
-5. returns predictions or score paths for host-side aggregation.
+For eligible tall SIMPLS classification tasks, the same statistics also avoid
+materializing each training-fold matrix. The fold predictor Gram matrix and
+class-wise predictor sums are projected through the fitted SIMPLS rotations to
+obtain the score Gram matrix and class-score sums required by pooled-covariance
+LDA. The existing Cholesky LDA solver is then applied to those moments. This is
+an algebraic reorganization only: fold centering and scaling, model fitting,
+held-out projection, class priors, and the public prediction path remain
+fold-specific. The package activates this route from problem dimensions; it is
+not a user-tuned modelling option.
 
-Component-path prediction has an ablation mode because repeated projection of
-the same test fold is avoidable. The candidate path uploads and projects the
-test fold once and evaluates all requested component prefixes from the shared
-scores. This optimization does not alter folds, model controls, predictions,
-or public arguments.
+The resident CUDA SIMPLS CV route uploads `X` and the response once, gathers
+fold rows on device, and keeps standardization, model fitting, score projection,
+prediction, and metric reduction on the GPU. When device memory permits,
+regression CV forms the full predictor-response product once and subtracts the
+held-out product for each fold. Transfers of requested public predictions and
+aggregate metrics are included in elapsed time. Unsupported routes fail
+explicitly rather than falling back to CPU.
 
-## Cross-validation optimization target
+Every fold fits one maximal component path and projects its test matrix once.
+Requested component prefixes are evaluated from the shared latent scores.
+When `classifier=argmax,lda` is supplied to the benchmark worker, the public
+tuning layer fits the PLS representation once through the LDA run and derives
+argmax from the retained PLS response-score path. Fold assignment, solver seed,
+selected components, and classifier semantics are unchanged.
 
-A fully GPU-native CUDA CV engine and a fixed operation-split Metal CV engine
-require reusable CV workspaces rather than a dispatch change. The target
-implementation will upload or expose `X`, the response or compact labels, and
-the fixed fold vector once. It will then:
+`--fold-cache=off` disables the sufficient-statistic caches only for a matched
+benchmark ablation. It is not a public modelling option. The benchmark worker
+uses `--fold-cache=on` by default.
 
-- derive fold-specific sums, means, scales, cross-covariances, and, where
-  useful, predictor cross-products on device;
-- obtain training sufficient statistics by subtracting held-out-fold moments
-  from full-data moments;
-- reuse CUDA handles or Metal/CPU operation-split workspaces, random-state
-  objects, and buffers across folds;
-- evaluate all requested component prefixes incrementally;
-- fit argmax or LDA and reduce accuracy, balanced accuracy, Q2, and RMSD on
-  the backend-specific execution route; and
-- return only the documented prediction/score paths and aggregate metrics.
-
-Host-side fold construction is retained because it is negligible, deterministic,
-and preserves the existing `constrain` semantics. No unsupported family may
-silently fall back to CPU. Initial native support should cover PLS-SVD and
-SIMPLS. OPLS requires additional fold-specific orthogonal-filter statistics,
-whereas nonlinear kernel PLS requires fold-specific Gram matrices and should
-remain a separately qualified route.
+Worker output contains both `prediction_signature`, a byte-exact repeatability
+check, and `numerical_prediction_signature`, which rounds numeric prediction
+quantities to 12 significant digits before hashing. Use the latter for cache
+ablations whose mathematically equivalent accumulation order may differ at
+floating-point roundoff; retain the former for repeated runs of one unchanged
+route.
 
 ## Study design
 
@@ -86,23 +89,18 @@ paired numerical identity.
 precomputed held-out fold, allowing the CV multiplier to be reported without
 changing fold construction or group constraints.
 
-## Current audit results
+## Validation outputs
 
-The September 2026 selected-component audit used float32 inputs, ten fixed
-folds, five fresh-process repetitions, and all four PLS families on 11
-datasets. The Mac panel contained 880/880 successful CPU and Metal workers.
-The fixed Metal operation split was not faster than the paired Mac CPU route
-in these cold-process cross-validation measurements: CPU/Metal ratios ranged
-from 0.214 to 0.992. This is retained as a negative result rather than hidden.
-The maximum CPU/Metal accuracy difference was 2.0e-5, and the maximum relative
-RMSD difference was 3.1e-6.
+Complete cross-validation timings include construction of the documented
+out-of-fold predictions and scores. They must therefore be distinguished from
+decomposition-only and compact-output profiling controls. Raw rows, logs,
+generated summaries, figures, and tables remain outside this repository.
 
-The operation-split cross-validation implementation still reduced work
-relative to ten independently timed fits in 22 of 44 Metal cells. The analogous
-counts were 11 of 44 for Mac CPU, 15 of 44 for Linux CPU, and 32 of 44 for
-CUDA. These comparisons quantify complete public workflows, including
-out-of-fold prediction and score assembly; they are not decomposition-only
-benchmarks. Raw results and generated summaries remain outside Git.
+The final two-dataset runner compares automatic and cache-disabled execution
+on identical folds and also records a one-fold baseline. It covers PLS-SVD and
+SIMPLS on CIFAR-100 and NMR, accepts a comma-separated backend list, and writes
+all generated rows, logs, and summaries to `FASTPLS_CV_OUTPUT`, which must be
+outside this repository.
 
 ## Usage
 
@@ -113,9 +111,42 @@ Rscript benchmark/gpu_cross_validation/worker.R \
   --output=/path/outside/git/cifar_cuda_cv.csv \
   --implementation=fused-prefix \
   --backend=cuda --precision=float32 \
-  --method=simpls --classifier=argmax \
+  --method=simpls --classifier=argmax,lda \
   --ncomp=10,20,50,100 --kfold=10 --seed=123
 ```
+
+To separate compiled fitting, prediction, and metric reduction from the cost
+of constructing the documented public prediction object, run:
+
+```sh
+Rscript benchmark/gpu_cross_validation/compact_cv_worker.R \
+  --library=/path/to/fastPLS/library \
+  --task=/path/to/nmr_task.rds \
+  --output=/path/outside/git/nmr_compact_cv.csv \
+  --backend=cuda --precision=float32 \
+  --method=simpls --ncomp=25,50,75,100 --kfold=10 --seed=123
+```
+
+This worker sets `store_predictions=FALSE` only on the internal compiled CV
+entry point. It is a profiling control, not an alternative public API, and its
+rows must not be mixed with complete public-workflow timings.
+
+For an extreme multivariate regression response, use the bounded-memory result
+worker instead of serializing the complete CV object for a fingerprint:
+
+```sh
+Rscript benchmark/gpu_cross_validation/large_regression_worker.R \
+  --library=/path/to/fastPLS/library \
+  --task=/path/to/nmr_task.rds \
+  --output=/path/outside/git/nmr_cv.csv \
+  --backend=cuda --precision=float32 \
+  --method=simpls --ncomp=50 --kfold=10 --seed=123
+```
+
+The worker retains the complete public CV computation but records only bounded
+metadata and a deterministic 4,096-value prediction sample. This avoids a
+second full serialization of very large prediction arrays. Generated results
+must remain outside this repository.
 
 Summarize paired fresh-process rows with:
 
