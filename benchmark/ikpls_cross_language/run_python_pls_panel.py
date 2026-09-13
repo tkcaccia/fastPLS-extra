@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run component-matched nirs4all-methods and scikit-learn PLS panels."""
+"""Run the component-matched scikit-learn PLS panel for Figure 1."""
 
 import argparse
 import csv
@@ -19,8 +19,6 @@ import psutil
 HERE = Path(__file__).resolve().parent
 WORKER = HERE / "worker_python_pls_panel.py"
 DEFAULT_IMPLEMENTATIONS = (
-    "nirs4all_methods_simpls",
-    "nirs4all_methods_rsvd",
     "sklearn_plsregression",
 )
 
@@ -107,7 +105,16 @@ def run_monitored(
             time.sleep(0.005)
     if process.returncode != 0:
         log_text = log_path.read_text(errors="replace")
-        tail = " | ".join(log_text.strip().splitlines()[-3:])
+        informative = [
+            line.strip()
+            for line in log_text.splitlines()
+            if "Error:" in line or "Pls4allError:" in line
+        ]
+        tail = (
+            informative[-1]
+            if informative
+            else " | ".join(log_text.strip().splitlines()[-3:])
+        )
         raise RuntimeError(
             f"worker exit code {process.returncode}"
             + (f": {tail}" if tail else "")
@@ -244,6 +251,9 @@ def main() -> None:
         "algorithm",
         "solver_controls",
         "precision",
+        "input_precision",
+        "input_format",
+        "model_precision",
         "ncomp",
     ]
     if len(success):

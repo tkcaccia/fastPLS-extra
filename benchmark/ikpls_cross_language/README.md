@@ -89,17 +89,30 @@ The generated large-case table contains the current-release results used in
 the manuscript. These are single-run feasibility measurements, not timing
 uncertainty estimates.
 
-## nirs4all-methods and scikit-learn panel
+## scikit-learn panel
 
-`worker_python_pls_panel.py` applies both the default SIMPLS and
-`randomized-svd` solvers from nirs4all-methods through the published
-`pls4all.sklearn.PLSRegression` binding, and applies scikit-learn
-`PLSRegression` to the same exported splits. These routes use their native
-float64 arithmetic, one effective CPU thread, the same component count, no
-predictor or response scaling, and final held-out prediction as the common
-endpoint. Classification uses the same dummy response and argmax decoding as
-the IKPLS workflow. The nirs4all-methods PLS-LDA facade is not benchmarked
-because version 1.0.18 supports only in-sample predictions for that estimator.
+`worker_python_pls_panel.py` applies scikit-learn `PLSRegression` to the same
+exported splits and component contract as the R implementations. The portable
+inputs are self-describing NumPy `.npy` arrays in C order. The route uses one
+effective CPU thread, no predictor or response scaling, and final held-out
+prediction as the common endpoint. Classification uses dummy responses and
+argmax decoding, as in the IKPLS workflow. nirs4all-methods is excluded from
+Figure 1.
+
+Convert an existing portable raw export to standard NumPy files before the
+benchmark:
+
+```sh
+python3 benchmark/ikpls_cross_language/convert_panel_to_numpy.py \
+  --inputs /path/to/raw-inputs \
+  --output /path/to/numpy-inputs
+```
+
+Each dataset directory then contains `X_train.npy`, `X_test.npy`,
+`Y_train.npy`, classification label vectors or `Y_test.npy`, and
+`metadata.json`. Files can be opened directly with `numpy.load()`, including
+memory-mapped reads. The worker validates shape, dtype, finiteness and label
+ranges before fitting.
 
 ```sh
 python3 benchmark/ikpls_cross_language/run_python_pls_panel.py \

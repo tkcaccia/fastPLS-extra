@@ -1,0 +1,14 @@
+dataset,task_type,plssvd_ncomp,simpls_ncomp,external_ncomp,include_external
+ccle,classification,17,50,50,yes
+cifar100,classification,99,99,99,yes
+gtex_v8,classification,30,50,50,yes
+metref,classification,21,50,50,yes
+retina,classification,10,10,10,yes
+tabula,classification,31,31,31,yes
+tcga_brca,classification,3,3,3,yes
+tcga_hnsc_methylation,classification,2,2,2,yes
+tcga_pan_cancer,classification,31,50,50,yes
+cbmc_citeseq,regression,31,44,44,yes
+prism,regression,6,6,6,yes
+nmr,regression,150,50,50,yes
+imagenet,classification,1000,1000,1000,limited

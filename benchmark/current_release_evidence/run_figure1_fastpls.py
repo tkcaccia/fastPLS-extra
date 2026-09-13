@@ -74,48 +74,70 @@ def run(command, ready, go, output, ready_timeout=900):
     return row
 
 
-def selected_components(path):
+def component_contract(path):
     selected = {}
     with Path(path).open(newline="") as stream:
         for row in csv.DictReader(stream):
-            family = row.get("family", row.get("method"))
-            backend = row.get("backend", "cpu")
-            component = row.get("ncomp", row.get("selected_ncomp"))
-            if family in {"simpls", "plssvd"} and backend == "cpu" and component:
-                selected[(row["dataset"], family)] = int(component)
+            for family in ("simpls", "plssvd"):
+                component = row.get(f"{family}_ncomp")
+                if component:
+                    selected[(row["dataset"], family)] = {
+                        "ncomp": int(component),
+                        "task_type": row["task_type"]
+                    }
     return selected
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--library", required=True)
-    parser.add_argument("--selected-panel", required=True)
+    parser.add_argument("--tasks", required=True, type=Path)
+    parser.add_argument(
+        "--component-contract",
+        default=str(Path(__file__).with_name("figure1_component_contract.csv"))
+    )
     parser.add_argument("--output", required=True)
     parser.add_argument("--package-version", required=True)
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--oversample", type=int, default=32)
     parser.add_argument("--power", type=int, default=5)
-    parser.add_argument("--methods", nargs="+", default=("simpls", "plssvd"),
+    parser.add_argument("--methods", nargs="+", default=("simpls",),
                         choices=("simpls", "plssvd"))
-    parser.add_argument("--datasets", nargs="+", default=(
-        "ccle", "cifar100", "gtex_v8", "metref", "retina", "tabula",
-        "tcga_brca", "tcga_hnsc_methylation", "tcga_pan_cancer"
-    ))
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=None,
+        help="Datasets to run; the default is every non-ImageNet contract row.",
+    )
     args = parser.parse_args()
-    ncomp = selected_components(args.selected_panel)
+    contract = component_contract(args.component_contract)
+    datasets = args.datasets
+    if datasets is None:
+        datasets = list(dict.fromkeys(
+            dataset for dataset, _ in contract if dataset != "imagenet"
+        ))
+    unknown = sorted({dataset for dataset in datasets if
+                      not any(key[0] == dataset for key in contract)})
+    if unknown:
+        parser.error("datasets absent from component contract: " + ", ".join(unknown))
     root = Path(__file__).resolve().parent
     target = Path(args.output).resolve()
     work = target.parent / (target.stem + "_workers")
     work.mkdir(parents=True, exist_ok=True)
     records = []
-    for dataset in args.datasets:
+    for dataset in datasets:
+        task_path = args.tasks.resolve() / f"{dataset}_task.rds"
+        if not task_path.is_file():
+            raise RuntimeError(f"missing prepared task: {task_path}")
         for method in args.methods:
             key = (dataset, method)
-            if key not in ncomp:
+            if key not in contract:
                 raise RuntimeError(
                     f"missing {method} component count for {dataset}"
                 )
-            for classifier in ("argmax", "lda"):
+            task_type = contract[key]["task_type"]
+            classifiers = ("lda",) if task_type == "classification" else ("none",)
+            for classifier in classifiers:
                 for replicate in range(1, args.repetitions + 1):
                     stem = f"{dataset}_{method}_{classifier}_r{replicate}"
                     output = work / f"{stem}.csv"
@@ -125,6 +147,10 @@ def main():
                         with output.open(newline="") as stream:
                             existing = next(csv.DictReader(stream))
                         if "peak_rss_mib" in existing:
+                            existing.setdefault(
+                                "ncomp_requested",
+                                str(contract[key]["ncomp"])
+                            )
                             records.append(existing)
                             continue
                     for path in (ready, go):
@@ -132,7 +158,8 @@ def main():
                             path.unlink()
                     command = [
                         "Rscript", str(root / "figure1_worker.R"), args.library,
-                        dataset, method, classifier, str(ncomp[key]),
+                        str(task_path), dataset, method, classifier,
+                        str(contract[key]["ncomp"]),
                         str(replicate), str(output), str(ready), str(go),
                         str(args.oversample), str(args.power),
                         args.package_version

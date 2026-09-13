@@ -17,6 +17,8 @@ out_value <- if (length(args) >= 2L) args[[2L]] else
 ikpls_panel_value <- Sys.getenv("FASTPLS_IKPLS_PANEL_SUMMARY")
 ikpls_large_value <- Sys.getenv("FASTPLS_IKPLS_LARGE_DIR")
 nmr_current_value <- Sys.getenv("FASTPLS_CURRENT_NMR_ROOT")
+figure1_fastpls_value <- Sys.getenv("FASTPLS_FIGURE1_FASTPLS_SUMMARY")
+figure1_data_value <- Sys.getenv("FASTPLS_FIGURE1_DATA")
 if (!nzchar(pkg_value) || !nzchar(evidence_value) || !nzchar(out_value) ||
         !nzchar(ikpls_panel_value) || !nzchar(ikpls_large_value) ||
         !nzchar(nmr_current_value)) {
@@ -105,7 +107,36 @@ dataset_labels <- c(
     tcga_pan_cancer = "TCGA Pan-\nCancer"
 )
 
-# Figure 1: current public fastPLS rows plus retained independent implementations.
+# Figure 1: fixed-component classification and regression workflows.
+if (nzchar(figure1_data_value)) {
+    figure1_data <- normalizePath(figure1_data_value, mustWork = TRUE)
+    file.copy(
+        figure1_data,
+        file.path(tabdir, "figure1_independent_implementation_data.csv"),
+        overwrite = TRUE
+    )
+    script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+    script_dir <- if (length(script_arg)) {
+        dirname(normalizePath(sub("^--file=", "", script_arg[[1L]])))
+    } else {
+        file.path(getwd(), "tools")
+    }
+    renderer <- file.path(script_dir, "build_figure1_six_panel.R")
+    if (!file.exists(renderer)) {
+        renderer <- file.path(getwd(), "tools", "build_figure1_six_panel.R")
+    }
+    status <- system2(
+        "Rscript",
+        c(
+            shQuote(renderer), shQuote(figure1_data),
+            shQuote(file.path(figdir, "figure1_independent_implementations.png")),
+            shQuote(file.path(figdir, "figure1_independent_implementations.pdf"))
+        )
+    )
+    if (!identical(status, 0L)) {
+        stop("The six-panel Figure 1 renderer failed.")
+    }
+} else {
 argmax <- read_required(file.path(
     optimized, "external_current_argmax_canonical_mem",
     "current_simpls_argmax_summary.csv"
@@ -114,6 +145,46 @@ lda <- read_required(file.path(
     optimized, "external_current_lda_canonical_mem",
     "current_simpls_lda_summary.csv"
 ))
+if (nzchar(figure1_fastpls_value)) {
+    current_fastpls <- read_required(normalizePath(
+        figure1_fastpls_value, mustWork = TRUE
+    ))
+    required_columns <- c(
+        "dataset", "method", "classifier", "backend", "precision",
+        "ncomp", "successful", "accuracy", "median_total_sec",
+        "median_peak_rss_mib", "package_version", "platform", "blas"
+    )
+    missing_columns <- setdiff(required_columns, names(current_fastpls))
+    if (length(missing_columns)) {
+        stop(
+            "Current Figure 1 fastPLS summary is missing: ",
+            paste(missing_columns, collapse = ", ")
+        )
+    }
+    if (any(current_fastpls$method != "simpls") ||
+            any(current_fastpls$backend != "cpu") ||
+            any(current_fastpls$precision != "float32") ||
+            any(current_fastpls$blas != "OpenBLAS") ||
+            any(!grepl("linux", current_fastpls$platform, ignore.case = TRUE))) {
+        stop(
+            "Figure 1 fastPLS rows must be Linux CPU SIMPLS, float32, and OpenBLAS."
+        )
+    }
+    canonical_fastpls <- function(data) {
+        transform(
+            data,
+            median_accuracy = accuracy,
+            median_time_sec = median_total_sec,
+            median_baseline_rss_mib = NA_real_
+        )
+    }
+    argmax <- canonical_fastpls(
+        current_fastpls[current_fastpls$classifier == "argmax", ]
+    )
+    lda <- canonical_fastpls(
+        current_fastpls[current_fastpls$classifier == "lda", ]
+    )
+}
 external <- read_required(file.path(
     release, "r_package_panel", "pls_package_comparison_summary.csv"
 ))
@@ -212,10 +283,7 @@ fast_row <- function(data, label) {
     )
 }
 
-comparison <- rbind(
-    fast_row(argmax, "fastPLS SIMPLS / argmax"),
-    fast_row(lda, "fastPLS SIMPLS / LDA")
-)
+comparison <- fast_row(lda, "fastPLS SIMPLS / LDA")
 
 external_map <- c(
     pls_simpls_fit = "pls / SIMPLS",
@@ -251,7 +319,7 @@ ik <- ikpls_panel[ikpls_panel$dataset %in% dataset_ids, ]
 if (nrow(ik)) {
     ik_rows <- data.frame(
         dataset = ik$dataset,
-        display = "IKPLS / algorithm 2",
+        display = "IKPLS",
         accuracy = ik$accuracy,
         time_sec = ik$median_total_sec,
         peak_rss_mib = ik$median_peak_rss_mib,
@@ -265,8 +333,8 @@ if (nrow(ik)) {
 }
 
 display_order <- c(
-    "fastPLS SIMPLS / argmax", "fastPLS SIMPLS / LDA",
-    "IKPLS / algorithm 2",
+    "fastPLS SIMPLS / LDA",
+    "IKPLS",
     "pls / SIMPLS", "plsgenomics / PLS-LDA",
     "mdatools / PLS-DA", "plsdepot / SIMPLS", "pcv / SIMPLS",
     "chemometrics / PLS eigen", "mixOmics / PLS-DA", "spls / sPLS-DA"
@@ -327,13 +395,14 @@ figure1 <- (p1a / p1b / p1c) +
     plot_annotation(
         title = "Single-CPU SIMPLS classification workflows",
         subtitle = paste(
-            "One effective BLAS thread; current fastPLS and IKPLS use the same",
-            "dataset-specific component counts and ten isolated repetitions."
+            "Linux Intel Core i7-13700, one OpenBLAS thread; fastPLS uses",
+            "float32 inputs and ten isolated repetitions."
         ),
         theme = theme(plot.title = element_text(face = "bold", size = 14),
                       plot.subtitle = element_text(size = 9))
     )
 save_plot(figure1, "figure1_independent_implementations", 9.3, 12.2)
+}
 
 # Figure 2: every paired CPU/accelerator runtime ratio is shown, irrespective
 # of numerical agreement. Agreement and metric values remain in the table.
