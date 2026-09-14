@@ -26,10 +26,7 @@ release. The principal blockers are:
 5. The independent IKPLS evidence does not consistently use the component
    contract declared for Figure 1, despite the manuscript describing the
    comparison as component matched.
-6. Metal compiles and links, but the current check process cannot access a
-   Metal device, so all functional Metal claims remain unverified by the fresh
-   package check.
-7. The public rSVD diagnostics usually certify only structural validity, not
+6. The public rSVD diagnostics usually certify only structural validity, not
    numerical agreement for the fitted dataset. The special large-problem
    control profile used by important workloads is not covered by the validation
    controls summarized in the manuscript.
@@ -116,6 +113,26 @@ appropriate submission explanation.
   `/private/tmp/fastpls_full_audit_09966/check/fastPLS.Rcheck/fastPLS/doc/fastPLS.html`
 - Current manual PDF:
   `/private/tmp/fastpls_full_audit_09966/manual/fastPLS-reference-manual-0.99.66.pdf`
+
+### Native Metal validation
+
+The same 0.99.66 source archive was checked again in a native macOS process
+with access to the Metal device:
+
+- `has_metal()` returned `TRUE`;
+- the complete `R CMD check --no-manual --no-build-vignettes` finished with
+  `Status: OK`;
+- the full suite reported 2,399 passes, 0 failures, and 28 skips;
+- every skip concerned CUDA, Windows-only behavior, or unavailable source-tree
+  inspection; no Metal test was skipped;
+- a separate Metal-only run executed 8 files, 23 tests, and 200 expectations,
+  all successfully.
+
+Native check log:
+`/private/tmp/fastpls_native_metal_check_utf8/fastPLS.Rcheck/00check.log`
+
+Native test log:
+`/private/tmp/fastpls_native_metal_check_utf8/fastPLS.Rcheck/tests/testthat.Rout`
 
 ## Critical findings
 
@@ -245,28 +262,7 @@ Required action:
   output and make the assembler reject mismatches.
 - Regenerate IKPLS tables and Figure 1 only after this validation passes.
 
-### C6. Functional Metal support is not verified by the package check
-
-The package compiled and linked Metal sources and frameworks, but `has_metal()`
-returned `FALSE` in the fresh check process. Consequently, Metal runtime tests
-did not execute. This may be a headless/sandbox device-access limitation rather
-than a source defect, but the distinction is not captured automatically.
-
-Impact:
-
-- A successful macOS R CMD check currently proves compilation only, not Metal
-  functionality, numerical concordance, or no-fallback behavior.
-- Manuscript Metal results cannot be tied to this release check.
-
-Required action:
-
-- Add a dedicated native macOS Metal job whose expected result is
-  `has_metal() == TRUE`; skipping should fail that job.
-- Test all supported family/precision/classifier paths and explicit failure of
-  unsupported float64 Metal requests.
-- Record device, macOS, SDK, command-buffer mode, and package commit.
-
-### C7. rSVD validation does not certify ordinary fitted objects
+### C6. rSVD validation does not certify ordinary fitted objects
 
 An ordinary public rSVD fit can return
 `structural_checks_passed_case_audit_unavailable` with
@@ -299,7 +295,7 @@ Required action:
 - Add a practical confirmatory workflow for users, such as repeated-seed
   agreement and a higher-accuracy comparison on a feasible subset.
 
-### C8. The manuscript exceeds the intended journal format
+### C7. The manuscript exceeds the intended journal format
 
 The current main document is approximately 6,600 words and its abstract is
 approximately 390 words. The supplement is approximately 14,800 words over 40
