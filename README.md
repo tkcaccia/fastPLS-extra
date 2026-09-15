@@ -1,7 +1,7 @@
 # fastPLS-extra
 
-Source repository for reproducible fastPLS benchmarks and
-publication-generation code. This directory has not yet been published.
+Companion source repository for reproducible fastPLS benchmarks,
+publication-generation code, and machine-checked algebraic invariants.
 
 This repository is not an installable R package and does not implement PLS or
 IRLBA. All supported modelling functions, including native rSVD, SIMPLS,
@@ -36,6 +36,25 @@ treated as proof of MIT ownership.
 Historical extraction snapshots and obsolete manuscript revisions are retained
 locally outside this Git checkout. They are not needed to reproduce the current
 benchmark workflows.
+
+## Machine-checked algebraic invariants
+
+The Lean 4 project in `formal/lean/` checks the exact-real-arithmetic
+identities reported in the CMPB supplementary material. The project includes a
+pinned Lean toolchain and resolved Mathlib manifest. From the repository root,
+run:
+
+```sh
+cd formal/lean
+lake exe cache get
+lake build
+```
+
+The cache step is optional but substantially reduces build time. Do not run
+`lake update` when reproducing the reported proof build because that command can
+change the resolved dependency revisions. These proofs establish the stated
+algebraic identities; they do not verify floating-point error, randomized-SVD
+accuracy, or equivalence between the Lean specification and compiled code.
 
 Shared validation runners are available here:
 
