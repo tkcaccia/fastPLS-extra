@@ -28,8 +28,11 @@ raw <- rbind(
 )
 if (is.null(raw) || !nrow(raw)) stop("No result rows were found.")
 
-raw$dataset <- sub("_task\\.rds$", "", raw$task)
+raw$dataset[grepl("^imagenet", tolower(raw$dataset))] <- "imagenet"
 raw$ok <- is.finite(raw$elapsed_sec) & raw$status != "error"
+raw$selection_metric <- raw$selection
+raw$ncomp <- raw$requested_ncomp
+if (!"error" %in% names(raw)) raw$error <- ""
 raw$control_profile <- "default_rsvd"
 raw$oversample <- 32L
 raw$power <- 5L
@@ -56,7 +59,7 @@ groups <- interaction(raw[keys], drop = TRUE, lex.order = TRUE)
 
 summary_rows <- lapply(split(raw, groups), function(block) {
     elapsed <- block$elapsed_sec[block$ok]
-    metrics <- block$best_metric[block$ok & is.finite(block$best_metric)]
+    metrics <- block$metric_value[block$ok & is.finite(block$metric_value)]
     data.frame(
         platform = block$platform[[1L]],
         dataset = block$dataset[[1L]],
@@ -98,12 +101,13 @@ summary_rows <- lapply(split(raw, groups), function(block) {
 summary <- do.call(rbind, summary_rows)
 
 cv <- summary[summary$workload == "cv", ]
-one <- summary[summary$workload == "one_fold", ]
+one <- summary[summary$workload == "fit_predict", ]
 pair_keys <- c("platform", "dataset", "method", "backend", "precision",
     "ncomp", "folds", "control_profile", "oversample", "power", "rsvd_seed")
 naive <- merge(cv, one, by = pair_keys, suffixes = c("_cv", "_one"), all = TRUE)
-naive$naive_kfold_sec <- naive$folds * naive$median_sec_one
-naive$naive_over_cv <- naive$naive_kfold_sec / naive$median_sec_cv
+naive$cv_over_fit_predict <- naive$median_sec_cv / naive$median_sec_one
+naive$cv_over_k_fit_predict <- naive$median_sec_cv /
+    (naive$folds * naive$median_sec_one)
 
 cpu <- cv[cv$backend == "cpu", c("platform", "dataset", "method",
     "precision", "ncomp", "control_profile", "oversample", "power",
@@ -126,5 +130,5 @@ write.csv(summary, file.path(args[[3L]], "gpu_cv_runtime_summary.csv"), row.name
 write.csv(accelerator,
     file.path(args[[3L]], "gpu_cv_cpu_accelerator_comparison.csv"),
     row.names = FALSE)
-write.csv(naive, file.path(args[[3L]], "gpu_cv_naive_kfold_comparison.csv"),
+write.csv(naive, file.path(args[[3L]], "gpu_cv_fit_predict_comparison.csv"),
     row.names = FALSE)

@@ -52,10 +52,8 @@ run_selected() {
 }
 
 for specification in \
-    "plssvd cpu irlba ${plssvd_k}" \
     "plssvd cpu rsvd ${plssvd_k}" \
     "plssvd cuda rsvd ${plssvd_k}" \
-    "simpls cpu irlba ${simpls_k}" \
     "simpls cpu rsvd ${simpls_k}" \
     "simpls cuda rsvd ${simpls_k}"
 do

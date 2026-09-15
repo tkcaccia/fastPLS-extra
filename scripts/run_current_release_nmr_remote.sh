@@ -63,14 +63,10 @@ for specification in \
     "simpls cpu rsvd 50 fixed50" \
     "plssvd cuda rsvd 50 fixed50" \
     "plssvd cpu rsvd 50 fixed50" \
-    "simpls cpu irlba 50 fixed50" \
-    "plssvd cpu irlba 50 fixed50" \
     "simpls cuda rsvd 165 fixed165" \
     "simpls cpu rsvd 165 fixed165" \
     "plssvd cuda rsvd 165 fixed165" \
-    "plssvd cpu rsvd 165 fixed165" \
-    "simpls cpu irlba 165 fixed165" \
-    "plssvd cpu irlba 165 fixed165"
+    "plssvd cpu rsvd 165 fixed165"
 do
     read -r family backend solver ncomp analysis <<<"${specification}"
     run_one "${family}" "${backend}" "${solver}" "${ncomp}" "${analysis}"
@@ -110,10 +106,8 @@ plssvd_selected="$(selected_component "${OUT_ROOT}/selection_plssvd/nmr_componen
 simpls_selected="$(selected_component "${OUT_ROOT}/selection_simpls/nmr_component_selection_decision.csv")"
 
 for specification in \
-    "plssvd cpu irlba ${plssvd_selected} selected" \
     "plssvd cpu rsvd ${plssvd_selected} selected" \
     "plssvd cuda rsvd ${plssvd_selected} selected" \
-    "simpls cpu irlba ${simpls_selected} selected" \
     "simpls cpu rsvd ${simpls_selected} selected" \
     "simpls cuda rsvd ${simpls_selected} selected"
 do

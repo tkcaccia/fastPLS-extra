@@ -24,7 +24,7 @@ TIMEOUT_SEC="${FASTPLS_PKG_COMPARE_TIMEOUT_SEC:-10000}"
 TIME_BIN="${TIME_BIN:-/usr/bin/time}"
 TIMEOUT_BIN="${TIMEOUT_BIN:-timeout}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-METHOD_FILTER="${FASTPLS_PKG_COMPARE_METHODS:-fastPLS_simpls_cpu_irlba,fastPLS_simpls_cpu_irlba_lda,pls_simpls_fit,plsgenomics_pls_lda,mdatools_plsda_or_pls,plsdepot_simpls,pcv_simpls,chemometrics_pls_eigen,mixOmics_plsda,spls_splsda}"
+METHOD_FILTER="${FASTPLS_PKG_COMPARE_METHODS:-fastPLS_simpls_cpu_rsvd,fastPLS_simpls_cpu_rsvd_lda,pls_simpls_fit,plsgenomics_pls_lda,mdatools_plsda_or_pls,plsdepot_simpls,pcv_simpls,chemometrics_pls_eigen,mixOmics_plsda,spls_splsda}"
 PRECISION="${FASTPLS_BENCH_PRECISION:-float64}"
 SELECTED_COMPONENTS_CSV="${FASTPLS_SELECTED_COMPONENTS_CSV:-}"
 

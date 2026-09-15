@@ -44,6 +44,12 @@ raw <- rbindlist(
     fill = TRUE
 )
 raw <- raw[status == "success"]
+scope <- tolower(Sys.getenv("FASTPLS_COMPONENT_PATH_SCOPE", "all"))
+if (scope == "cmpb") {
+    raw <- raw[platform == "CUDA workstation"]
+} else if (scope != "all") {
+    stop("FASTPLS_COMPONENT_PATH_SCOPE must be 'all' or 'cmpb'.")
+}
 raw[, backend := toupper(backend_requested)]
 raw[backend == "METAL", backend := "Metal"]
 raw[backend == "CUDA", backend := "CUDA"]
@@ -85,13 +91,22 @@ summary <- raw[, {
         direction_rule = paste(sort(unique(direction_rule)), collapse = ";"),
         execution_route = paste(sort(unique(execution_route)), collapse = ";")
     )
-}, by = .(platform, dataset, task_type, method, backend, ncomp, precision)]
+}, by = .(
+    platform, dataset, task_type, method, backend, classifier, ncomp, precision
+)]
 
 selection <- fread(selection_file)
-selection <- selection[status == "success", .(
+if ("status" %in% names(selection)) {
+    selection <- selection[status == "success"]
+}
+if (!"selected_classifier" %in% names(selection)) {
+    selection[, selected_classifier := NA_character_]
+}
+selection <- selection[, .(
     dataset,
     method = family,
     selected_ncomp = as.integer(selected_ncomp),
+    selected_classifier,
     selection_metric,
     selection_status,
     grid_min,
@@ -100,6 +115,20 @@ selection <- selection[status == "success", .(
     selection_oversample = oversample,
     selection_power = power
 )]
+contract_file <- Sys.getenv("FASTPLS_COMPONENT_CONTRACT", "")
+if (nzchar(contract_file)) {
+    contract <- fread(normalizePath(contract_file, mustWork = TRUE))
+    contract <- contract[, .(
+        dataset, method = family,
+        retained_ncomp = as.integer(selected_ncomp)
+    )]
+    selection <- merge(
+        selection, contract,
+        by = c("dataset", "method"), all.x = TRUE
+    )
+    selection[!is.na(retained_ncomp), selected_ncomp := retained_ncomp]
+    selection[, retained_ncomp := NULL]
+}
 
 safe_cor <- function(x, y) {
     keep <- is.finite(x) & is.finite(y)
@@ -116,7 +145,7 @@ correlations <- summary[, .(
     rho_total_time = safe_cor(ncomp, total_sec_median),
     rho_peak_rss = safe_cor(ncomp, peak_rss_mib_median),
     rho_incremental_rss = safe_cor(ncomp, incremental_rss_mib_median)
-), by = .(platform, dataset, method, backend)]
+), by = .(platform, dataset, method, backend, classifier)]
 
 fwrite(raw, file.path(output_dir, "component_path_raw.csv"))
 fwrite(summary, file.path(output_dir, "component_path_summary.csv"))
@@ -134,70 +163,163 @@ family_labels <- c(
     plssvd = "PLS-SVD", simpls = "SIMPLS", opls = "OPLS",
     kernelpls = "kernel PLS"
 )
-backend_colours <- c(CPU = "#2166AC", CUDA = "#B2182B", Metal = "#D95F02")
+architecture_colours <- c(
+    "Mac CPU" = "#0072B2",
+    "Metal" = "#E69F00",
+    "Linux CPU" = "#009E73",
+    "CUDA" = "#CC79A7"
+)
+if (scope == "cmpb") {
+    architecture_colours <- architecture_colours[c("Linux CPU", "CUDA")]
+}
 
 plot_long <- rbindlist(list(
-    summary[, .(platform, dataset, method, backend, ncomp,
-                measure = "Predictive metric", value = metric_median)],
-    summary[, .(platform, dataset, method, backend, ncomp,
-                measure = "Total time (s)", value = total_sec_median)],
-    summary[, .(platform, dataset, method, backend, ncomp,
+    summary[, .(platform, dataset, task_type, method, backend, classifier, ncomp,
+                measure = "Predictive metric", value = metric_median,
+                q1 = metric_q1, q3 = metric_q3)],
+    summary[, .(platform, dataset, task_type, method, backend, classifier, ncomp,
+                measure = "Fit + prediction time (s)", value = total_sec_median,
+                q1 = total_sec_q1, q3 = total_sec_q3)],
+    summary[, .(platform, dataset, task_type, method, backend, classifier, ncomp,
                 measure = "Incremental host RSS (MiB)",
-                value = incremental_rss_mib_median)]
+                value = incremental_rss_mib_median,
+                q1 = incremental_rss_mib_q1,
+                q3 = incremental_rss_mib_q3)]
 ))
+plot_long[, architecture := fifelse(
+    platform == "Metal workstation" & backend == "CPU", "Mac CPU",
+    fifelse(
+        platform == "Metal workstation" & backend == "Metal", "Metal",
+        fifelse(backend == "CUDA", "CUDA", "Linux CPU")
+    )
+)]
+plot_long[, classifier_display := fifelse(
+    task_type == "regression", "Regression",
+    fifelse(classifier == "lda", "LDA", "Argmax")
+)]
+plot_long[, architecture := factor(
+    architecture,
+    levels = names(architecture_colours)
+)]
+plot_long[, classifier_display := factor(
+    classifier_display,
+    levels = c("Argmax", "LDA", "Regression")
+)]
 plot_long[, method := factor(method, levels = names(family_labels),
                              labels = unname(family_labels))]
 plot_long[, measure := factor(
     measure,
-    levels = c("Predictive metric", "Total time (s)",
+    levels = c("Predictive metric", "Fit + prediction time (s)",
                "Incremental host RSS (MiB)")
 )]
 
+architecture_shapes <- c(
+    "Mac CPU" = 21,
+    "Metal" = 22,
+    "Linux CPU" = 23,
+    "CUDA" = 24
+)
+architecture_shapes <- architecture_shapes[names(architecture_colours)]
+
 for (dataset_id in unique(plot_long$dataset)) {
     current <- plot_long[dataset == dataset_id & is.finite(value)]
+    metric_label <- if (current$task_type[[1L]] == "classification") {
+        "Test accuracy"
+    } else {
+        "Test RMSD"
+    }
+    current[, measure_display := fifelse(
+        as.character(measure) == "Predictive metric",
+        metric_label,
+        as.character(measure)
+    )]
+    current[, measure_display := factor(
+        measure_display,
+        levels = c(
+            metric_label,
+            "Fit + prediction time (s)",
+            "Incremental host RSS (MiB)"
+        )
+    )]
     selected <- selection[dataset == dataset_id]
     selected[, method := factor(method, levels = names(family_labels),
                                 labels = unname(family_labels))]
     figure <- ggplot(
         current,
-        aes(ncomp, value, colour = backend, linetype = platform,
-            group = interaction(platform, backend))
+        aes(
+            ncomp,
+            value,
+            colour = architecture,
+            fill = architecture,
+            shape = architecture,
+            linetype = classifier_display,
+            group = interaction(architecture, classifier_display)
+        )
     ) +
         geom_vline(
             data = selected,
             aes(xintercept = selected_ncomp),
             inherit.aes = FALSE,
             colour = "grey35",
-            linewidth = 0.35,
+            linewidth = 0.5,
             linetype = "dotted"
         ) +
-        geom_line(linewidth = 0.62, na.rm = TRUE) +
-        geom_point(size = 1.5, na.rm = TRUE) +
-        facet_grid(measure ~ method, scales = "free_y") +
-        scale_colour_manual(values = backend_colours) +
-        labs(
-            title = dataset_labels[[dataset_id]],
-            subtitle = paste(
-                "Current fastPLS component paths; dotted lines mark",
-                "training-selected component counts"
-            ),
-            x = "Requested components",
-            y = NULL,
-            colour = "Backend",
-            linetype = "Computer"
+        geom_ribbon(
+            aes(ymin = q1, ymax = q3),
+            alpha = 0.12,
+            colour = NA,
+            linetype = 0,
+            show.legend = FALSE,
+            na.rm = TRUE
         ) +
-        theme_minimal(base_size = 8.5) +
+        geom_line(linewidth = 0.65, na.rm = TRUE) +
+        geom_point(
+            size = 2.0,
+            stroke = 0.6,
+            colour = "black",
+            na.rm = TRUE
+        ) +
+        facet_grid(measure_display ~ method, scales = "free_y") +
+        scale_colour_manual(values = architecture_colours, drop = FALSE) +
+        scale_fill_manual(values = architecture_colours, drop = FALSE) +
+        scale_shape_manual(values = architecture_shapes, drop = FALSE) +
+        scale_linetype_manual(
+            values = c(Argmax = "solid", LDA = "dashed", Regression = "solid")
+        ) +
+        labs(
+            title = paste(
+                dataset_labels[[dataset_id]],
+                "component-dependent prediction and computation"
+            ),
+            subtitle = paste(
+                "Models fitted on the predefined training set and evaluated on",
+                "the fixed test set; medians and interquartile ranges from three",
+                "isolated processes"
+            ),
+            x = "Components",
+            y = NULL,
+            colour = NULL,
+            fill = NULL,
+            shape = NULL,
+            linetype = "Prediction head"
+        ) +
+        theme_bw(base_size = 9.5) +
         theme(
-            plot.title = element_text(face = "bold", size = 12),
+            plot.title = element_text(face = "bold", size = 13),
             strip.text = element_text(face = "bold"),
             panel.grid.minor = element_blank(),
-            legend.position = "bottom"
+            legend.position = "bottom",
+            legend.box = "horizontal",
+            axis.text.x = element_text(angle = 45, hjust = 1)
         )
+    if (current$task_type[[1L]] == "regression") {
+        figure <- figure + guides(linetype = "none")
+    }
     stem <- paste0("component_path_", dataset_id)
     ggsave(file.path(plot_dir, paste0(stem, ".png")), figure,
-           width = 9.0, height = 7.0, units = "in", dpi = 300, bg = "white")
+           width = 10.8, height = 8.2, units = "in", dpi = 300, bg = "white")
     ggsave(file.path(plot_dir, paste0(stem, ".pdf")), figure,
-           width = 9.0, height = 7.0, units = "in", device = cairo_pdf,
+           width = 10.8, height = 8.2, units = "in", device = cairo_pdf,
            bg = "white")
 }
 

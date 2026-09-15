@@ -39,12 +39,17 @@ dataset_caps <- c(
   retina = 50L,
   tabula = 50L,
   tcga_brca = 100L,
-  tcga_hnsc_methylation = 100L,
+  tcga_hnsc_methylation = 42L,
   tcga_pan_cancer = 200L
 )
 families <- c("plssvd", "simpls", "opls", "kernelpls")
+classification_heads <- c("argmax", "lda")
 kfold <- as.integer(Sys.getenv("FASTPLS_COMPONENT_KFOLD", "10"))
 seed <- as.integer(Sys.getenv("FASTPLS_COMPONENT_SEED", "123"))
+n.cores <- as.integer(Sys.getenv("FASTPLS_COMPONENT_NCORES", "1"))
+if (!is.finite(n.cores) || n.cores < 1L) {
+  stop("FASTPLS_COMPONENT_NCORES must be positive.", call. = FALSE)
+}
 component_precision <- tolower(Sys.getenv(
   "FASTPLS_COMPONENT_PRECISION", "native"
 ))
@@ -88,7 +93,7 @@ task_dimensions <- function(task) {
        classification = classification)
 }
 
-make_config <- function(dataset, family) {
+make_config <- function(dataset, family, classifier) {
   task <- readRDS(task_path(dataset))
   task <- validate_publication_task(task, dataset)
   dimensions <- task_dimensions(task)
@@ -112,21 +117,30 @@ make_config <- function(dataset, family) {
     stop("No valid component count for ", dataset, "/", family, call. = FALSE)
   }
   list(
-    run_id = paste(dataset, family, sep = "__"),
+    run_id = paste(dataset, family, classifier, sep = "__"),
     dataset = dataset,
     family = family,
+    classifier = classifier,
     task_path = task_path(dataset),
     grid = seq_len(grid_max),
     intrinsic_limit = as.integer(family_limit),
     kfold = kfold,
     seed = seed,
+    n.cores = n.cores,
     selection_metric = if (dimensions$classification) "accuracy" else "rmsd",
     precision = component_precision
   )
 }
 
 configs <- unlist(lapply(names(dataset_caps), function(dataset) {
-  lapply(families, function(family) make_config(dataset, family))
+  task <- validate_publication_task(readRDS(task_path(dataset)), dataset)
+  dimensions <- task_dimensions(task)
+  heads <- if (dimensions$classification) classification_heads else "argmax"
+  unlist(lapply(families, function(family) {
+    lapply(heads, function(classifier) {
+      make_config(dataset, family, classifier)
+    })
+  }), recursive = FALSE)
 }), recursive = FALSE)
 saveRDS(configs, file.path(out_dir, "configurations.rds"))
 
@@ -179,10 +193,29 @@ write.csv(summary, file.path(out_dir, "component_selection_summary.csv"),
           row.names = FALSE)
 write.csv(metric_paths, file.path(out_dir, "component_selection_paths.csv"),
           row.names = FALSE)
-selected <- summary[summary$status == "success", c(
-  "dataset", "family", "selected_ncomp", "selection_status", "grid_min",
-  "grid_max", "intrinsic_limit", "selection_metric", "selected_metric"
+successful <- summary[summary$status == "success", , drop = FALSE]
+selection_keys <- unique(successful[c("dataset", "family")])
+selected_rows <- lapply(seq_len(nrow(selection_keys)), function(index) {
+  key <- selection_keys[index, , drop = FALSE]
+  candidates <- successful[
+    successful$dataset == key$dataset & successful$family == key$family,
+    ,
+    drop = FALSE
+  ]
+  chosen <- if (identical(candidates$selection_metric[[1L]], "rmsd")) {
+    which.min(candidates$selected_metric)
+  } else {
+    which.max(candidates$selected_metric)
+  }
+  candidates[chosen, , drop = FALSE]
+})
+selected <- do.call(rbind, selected_rows)[c(
+  "dataset", "family", "classifier", "selected_ncomp", "selection_status",
+  "grid_min", "grid_max", "intrinsic_limit", "selection_metric",
+  "selected_metric", "kfold", "seed", "precision", "control_profile",
+  "oversample", "power", "package_version"
 )]
+names(selected)[names(selected) == "classifier"] <- "selected_classifier"
 write.csv(selected, file.path(out_dir, "selected_components.csv"),
           row.names = FALSE)
 writeLines(
@@ -192,9 +225,12 @@ writeLines(
     paste("task_root:", task_root),
     paste("kfold:", kfold),
     paste("seed:", seed),
+    paste("n.cores:", n.cores),
     paste("precision:", component_precision),
     "selection_data: training data only",
     "classification_metric: accuracy",
+    "classification_heads: argmax and lda",
+    "classification_selection: maximum training-only CV accuracy across component count and classifier",
     "regression_metric: RMSD",
     capture.output(sessionInfo())
   ),

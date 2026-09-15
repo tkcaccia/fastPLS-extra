@@ -13,6 +13,31 @@ specifications <- list(
     tabula = list(ncomp = c(10L, 20L, 30L, 44L)),
     cifar100 = list(ncomp = c(50L, 100L))
 )
+selected_datasets <- strsplit(
+    Sys.getenv("FASTPLS_CV_DATASETS", paste(names(specifications), collapse = ",")),
+    ",", fixed = TRUE
+)[[1L]]
+selected_methods <- strsplit(
+    Sys.getenv("FASTPLS_CV_METHODS", "plssvd,simpls,kernelpls"),
+    ",", fixed = TRUE
+)[[1L]]
+selected_classifiers <- strsplit(
+    Sys.getenv("FASTPLS_CV_CLASSIFIERS", "argmax,lda"),
+    ",", fixed = TRUE
+)[[1L]]
+repetitions <- as.integer(Sys.getenv("FASTPLS_CV_REPETITIONS", "7"))
+if (any(!selected_datasets %in% names(specifications))) {
+    stop("FASTPLS_CV_DATASETS contains an unknown dataset.")
+}
+if (any(!selected_methods %in% c("plssvd", "simpls", "kernelpls"))) {
+    stop("FASTPLS_CV_METHODS contains an unsupported method.")
+}
+if (any(!selected_classifiers %in% c("argmax", "lda"))) {
+    stop("FASTPLS_CV_CLASSIFIERS contains an unsupported classifier.")
+}
+if (is.na(repetitions) || repetitions < 1L) {
+    stop("FASTPLS_CV_REPETITIONS must be a positive integer.")
+}
 
 set_cache <- function(enabled) {
     value <- if (enabled) "1" else "0"
@@ -53,14 +78,14 @@ run_once <- function(task, dataset, method, classifier, enabled, replicate) {
 }
 
 rows <- list()
-for (dataset in names(specifications)) {
+for (dataset in selected_datasets) {
     task <- readRDS(file.path(data_root, paste0(dataset, "_task.rds")))
     if (inherits(task$Xtrain, "float32")) {
         task$Xtrain <- float::dbl(task$Xtrain)
     }
-    for (method in c("simpls", "kernelpls")) {
-        for (classifier in c("argmax", "lda")) {
-            for (replicate in seq_len(7L)) {
+    for (method in selected_methods) {
+        for (classifier in selected_classifiers) {
+            for (replicate in seq_len(repetitions)) {
                 for (enabled in c(FALSE, TRUE)) {
                     rows[[length(rows) + 1L]] <- run_once(
                         task, dataset, method, classifier, enabled, replicate

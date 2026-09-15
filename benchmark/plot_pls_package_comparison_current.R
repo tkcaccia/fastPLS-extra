@@ -27,8 +27,8 @@ repetition_label <- if (length(repetition_counts)) {
 }
 
 method_labels <- c(
-    fastPLS_simpls_cpu_irlba = "fastPLS SIMPLS / argmax",
-    fastPLS_simpls_cpu_irlba_lda = "fastPLS SIMPLS / LDA",
+    fastPLS_simpls_cpu_rsvd = "fastPLS SIMPLS / argmax",
+    fastPLS_simpls_cpu_rsvd_lda = "fastPLS SIMPLS / LDA",
     pls_simpls_fit = "pls / SIMPLS",
     plsgenomics_pls_lda = "plsgenomics / PLS-LDA",
     mdatools_plsda_or_pls = "mdatools / PLS-DA",

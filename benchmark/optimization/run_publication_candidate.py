@@ -177,7 +177,7 @@ def main():
             "FASTPLS_EXTERNAL_TIMING_RESULTS_DIR": str(results / "external_simpls"),
         })
         add("package_panel_fastpls_only", ["bash", source / "scripts/remote_run_pls_package_comparison.sh"], {
-            "FASTPLS_PKG_COMPARE_METHODS": "fastPLS_simpls_cpu_irlba,fastPLS_simpls_cpu_irlba_lda",
+            "FASTPLS_PKG_COMPARE_METHODS": "fastPLS_simpls_cpu_rsvd,fastPLS_simpls_cpu_rsvd_lda",
             "FASTPLS_PKG_COMPARE_RESULTS_DIR": str(results / "r_package_panel"),
         })
     if args.nmr:
@@ -189,7 +189,8 @@ def main():
                 "--grid=1,2,3,5,10,25,50,75,100,125,150,165,175,200,250,300",
                 "--seeds=123,456,789,1011,2027", "--fit_seed=123",
             ])
-            for backend, solver in (("cpu", "irlba"), ("cpu", "rsvd"), (args.accelerator, "rsvd")):
+            for backend, solver in (("cpu", "rsvd"),
+                                    (args.accelerator, "rsvd")):
                 for components in sorted(set((5 if family == "plssvd" else 50, 50, 165))):
                     name = f"nmr_{family}_{backend}_{solver}_{components}"
                     r(name, "benchmark/benchmark_nmr_qualified_solver.R", [

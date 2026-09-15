@@ -16,6 +16,9 @@ GROUP_KEYS = [
     "algorithm",
     "solver_controls",
     "precision",
+    "input_precision",
+    "input_format",
+    "model_precision",
     "ncomp",
 ]
 
@@ -62,16 +65,14 @@ def main() -> None:
             else:
                 frame["warnings"] = frame["warnings"].fillna(warning_detail)
             if "solver_controls" not in frame:
-                is_nirs_rsvd = (
-                    frame.get("implementation", pd.Series(dtype=str))
-                    == "nirs4all_methods_rsvd"
-                )
                 frame["solver_controls"] = "package defaults"
-                if len(frame) and bool(is_nirs_rsvd.iloc[0]):
-                    frame["solver_controls"] = (
-                        "package defaults; randomized controls not exposed "
-                        "by binding"
-                    )
+            for column, value in (
+                ("input_precision", "not recorded"),
+                ("input_format", "not recorded"),
+                ("model_precision", "not recorded"),
+            ):
+                if column not in frame:
+                    frame[column] = value
             current_error = (
                 ""
                 if "error" not in frame or not len(frame)

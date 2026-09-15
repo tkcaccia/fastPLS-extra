@@ -273,7 +273,6 @@ tryCatch({
     ncomp = cfg$ncomp,
     scaling = cfg$scaling,
     method = cfg$method,
-    svd.method = cfg$svd_method,
     classifier = cfg$classifier,
     backend = cfg$backend,
     north = cfg$north,
@@ -284,7 +283,8 @@ tryCatch({
     fit = FALSE,
     return_variance = FALSE,
     return_loadings = isTRUE(cfg$save_diagnostics),
-    seed = cfg$seed
+    seed = cfg$seed,
+    n.cores = cfg$n.cores %||% 1L
   )
   if (is.finite(cfg$oversample)) fit_arguments$oversample <- cfg$oversample
   if (is.finite(cfg$power)) fit_arguments$power <- cfg$power
@@ -337,7 +337,8 @@ tryCatch({
         fit,
         task$Xtest,
         Ytest = task$Ytest,
-        backend = cfg$backend
+        backend = cfg$backend,
+        n.cores = cfg$n.cores %||% 1L
       ),
       warning = function(w) {
         warnings_seen <<- c(warnings_seen, conditionMessage(w))

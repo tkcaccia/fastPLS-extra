@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 13L) {
+if (!length(args) %in% c(13L, 17L)) {
     stop(paste(
         "Usage: selected_backend_worker.R LIB TASK FAMILY BACKEND NCOMP",
         paste(
@@ -24,6 +24,30 @@ source_id <- args[[10L]]
 precision <- args[[11L]]
 expected_version <- args[[12L]]
 classifier <- match.arg(args[[13L]], c("argmax", "lda"))
+kernel <- if (length(args) >= 14L) {
+    match.arg(args[[14L]], c("linear", "rbf", "polynomial"))
+} else {
+    "linear"
+}
+gamma <- if (length(args) >= 15L && !identical(args[[15L]], "auto")) {
+    as.numeric(args[[15L]])
+} else {
+    NULL
+}
+degree <- if (length(args) >= 16L) as.integer(args[[16L]]) else 3L
+coef0 <- if (length(args) >= 17L) as.numeric(args[[17L]]) else 1
+
+benchmark_ncores <- Sys.getenv("FASTPLS_BENCHMARK_NCORES", unset = "")
+if (nzchar(benchmark_ncores)) {
+    benchmark_ncores <- as.integer(benchmark_ncores)
+    if (is.na(benchmark_ncores) || !benchmark_ncores %in% c(1L, 4L)) {
+        stop(
+            "FASTPLS_BENCHMARK_NCORES must be either 1 or 4.",
+            call. = FALSE
+        )
+    }
+    options(n.cores = benchmark_ncores)
+}
 
 .libPaths(unique(c(library_path, .libPaths())))
 suppressPackageStartupMessages(library(fastPLS))
@@ -43,6 +67,14 @@ if (!identical(as.character(packageVersion("fastPLS")), expected_version)) {
 }
 
 task <- readRDS(task_path)
+if (is.null(task$dataset) || !length(task$dataset) || !nzchar(task$dataset[[1L]])) {
+    task$dataset <- sub("_task\\.rds$", "", basename(task_path))
+}
+if (!all(c("Xtrain", "Xtest") %in% names(task)) &&
+        all(c("Xtrain_rds", "Xtest_rds") %in% names(task))) {
+    task$Xtrain <- readRDS(task$Xtrain_rds)
+    task$Xtest <- readRDS(task$Xtest_rds)
+}
 required <- c("Xtrain", "Ytrain", "Xtest", "Ytest")
 if (!is.list(task) || !all(required %in% names(task))) {
     stop("Prepared task is missing a required matrix or response", call. = FALSE)
@@ -122,7 +154,10 @@ fit_time <- system.time({
         method = family,
         backend = backend,
         classifier = classifier,
-        kernel = "linear",
+        kernel = kernel,
+        gamma = gamma,
+        degree = degree,
+        coef0 = coef0,
         north = 1L,
         fit = FALSE,
         proj = FALSE,
@@ -149,6 +184,36 @@ if (classification) {
     metric_value <- sqrt(mean((as.matrix(prediction) - as.matrix(observed))^2))
 }
 internal <- attr(fit, "fastPLS_internal", exact = TRUE)
+reported_precision <- internal$precision %||% NA_character_
+normalized_precision <- switch(
+    reported_precision,
+    single = "float32", double = "float64", reported_precision
+)
+if (!is.na(normalized_precision) &&
+        !identical(normalized_precision, precision)) {
+    stop(
+        "Requested ", precision, " but the fit reported ",
+        reported_precision, call. = FALSE
+    )
+}
+execution_route <- fit$diagnostics$residency$route %||%
+    internal$execution_route %||% internal$resident_backend %||%
+    internal$predict_backend %||% fit$diagnostics$rsvd$backend %||% ""
+route_matches <- switch(
+    backend,
+    cpu = grepl("CPU", execution_route, ignore.case = TRUE) &&
+        !grepl("CUDA|Metal", execution_route, ignore.case = TRUE),
+    cuda = grepl("CUDA", execution_route, ignore.case = TRUE),
+    metal = grepl("Metal", execution_route, ignore.case = TRUE),
+    FALSE
+)
+if (!isTRUE(route_matches)) {
+    stop(
+        "Requested backend '", backend, "' but the fit reported route '",
+        execution_route, "'", call. = FALSE
+    )
+}
+effective_ncomp <- max(as.integer(internal$ncomp %||% fit$ncomp %||% ncomp))
 controls <- fit$diagnostics$metal_operation_split
 if (is.null(controls)) controls <- fit$diagnostics$resident_controls
 if (is.null(controls)) controls <- fit$diagnostics$simpls
@@ -162,9 +227,14 @@ row <- data.frame(
     backend = backend,
     precision = precision,
     classifier = classifier,
-    ncomp = ncomp,
+    requested_ncomp = ncomp,
+    effective_ncomp = effective_ncomp,
     seed = 123L,
     replicate = replicate_id,
+    kernel = if (family == "kernelpls") kernel else "",
+    gamma = if (family == "kernelpls") gamma %||% NA_real_ else NA_real_,
+    degree = if (family == "kernelpls") degree else NA_integer_,
+    coef0 = if (family == "kernelpls") coef0 else NA_real_,
     fit_sec = fit_time,
     prediction_sec = prediction_time,
     total_sec = fit_time + prediction_time,
@@ -172,8 +242,7 @@ row <- data.frame(
     metric_value = metric_value,
     prefit_rss_mib = as.numeric(readLines(ready, warn = FALSE)[[1L]]),
     final_rss_mib = rss_mib(),
-    execution_route = fit$diagnostics$residency$route %||%
-        internal$resident_backend %||% "compiled CPU",
+    execution_route = execution_route,
     refresh_block = controls$refresh_block %||%
         controls$candidate_block_size %||% NA_integer_,
     effective_oversample = controls$effective_oversample %||%
@@ -183,6 +252,7 @@ row <- data.frame(
         controls$case_audit$max_effective_power %||%
         controls$power %||% NA_integer_,
     status = "success",
+    error_message = "",
     stringsAsFactors = FALSE
 )
 dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)

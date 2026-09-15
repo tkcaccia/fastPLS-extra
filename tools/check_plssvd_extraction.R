@@ -6,7 +6,7 @@ if (any(grepl("frozen|ikpls", args, ignore.case = TRUE))) {
 }
 .libPaths(unique(c(normalizePath(args[[1L]]), .libPaths())))
 suppressPackageStartupMessages(library(fastPLS))
-options(backend = "cpu", cores = 1L)
+options(backend = "cpu", n.cores = 1L)
 outputs <- list()
 warnings <- list()
 for (shape in c("tall", "wide", "response_wide", "classification")) {

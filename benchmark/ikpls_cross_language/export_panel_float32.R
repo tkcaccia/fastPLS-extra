@@ -19,11 +19,17 @@ dir.create(output_root, recursive = TRUE, showWarnings = FALSE)
 `%||%` <- function(x, fallback) if (is.null(x)) fallback else x
 
 selection <- read.csv(selection_path, stringsAsFactors = FALSE)
-required_selection <- c("dataset", "family", "selected_ncomp")
-if (!all(required_selection %in% names(selection))) {
+if (all(c("dataset", "task_type", "external_ncomp") %in% names(selection))) {
+    if ("include_external" %in% names(selection)) {
+        selection <- selection[selection$include_external != "limited", , drop = FALSE]
+    }
+    selection$family <- "external"
+    selection$selected_ncomp <- selection$external_ncomp
+} else if (!all(c("dataset", "family", "selected_ncomp") %in% names(selection))) {
     stop("The component-selection table has an incompatible schema.", call. = FALSE)
+} else {
+    selection <- selection[selection$family == "simpls", , drop = FALSE]
 }
-selection <- selection[selection$family == "simpls", , drop = FALSE]
 if (anyDuplicated(selection$dataset)) {
     stop("The SIMPLS component-selection table contains duplicate datasets.", call. = FALSE)
 }

@@ -20,7 +20,7 @@ if (!identical(as.character(packageVersion("fastPLS")), "0.99.40")) {
     stop("The multicore benchmark requires fastPLS 0.99.40.", call. = FALSE)
 }
 
-options(backend = "cpu", cores = cores)
+options(backend = "cpu", n.cores = cores)
 
 # A probe of an unrelated OpenBLAS installation cannot establish that fastPLS
 # itself uses that library. Verify the candidate shared object's dependencies.

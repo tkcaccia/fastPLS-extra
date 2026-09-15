@@ -2,6 +2,36 @@
 fastpls_nmr_prepare_scoring <- function(model, X_validation, Y_validation,
                                        block_size) {
     model <- fastPLS:::.fastpls_restore_internal_output_fields(model)
+    if (inherits(model, "fastPLSOpls")) {
+        outer <- model
+        if (identical(outer$precision, "float32")) {
+            engine <- sub(
+                "^float32_", "",
+                outer$opls_filter_engine %||% outer$opls_engine
+            )
+            raw <- fastPLS:::opls_apply_filter_float32_cpp(
+                fastPLS:::.as_float32_matrix(X_validation, "X_validation"),
+                outer$mX, outer$vX, outer$W_orth, outer$P_orth,
+                fastPLS:::.float32_product_backend_id(engine)
+            )
+            X_validation <- fastPLS:::.float32_from_bits(raw$X)
+        } else {
+            X_validation <- fastPLS:::opls_apply_filter_cpp(
+                as.matrix(X_validation), outer$mX, outer$vX,
+                outer$W_orth, outer$P_orth
+            )
+        }
+        model <- fastPLS:::.fastpls_restore_internal_output_fields(
+            outer$inner_model
+        )
+    } else if (inherits(model, "fastPLSKernel")) {
+        if (!identical(model$kernel, "linear")) {
+            stop("NMR prefix scoring supports the linear kernel PLS route only.")
+        }
+        model <- fastPLS:::.fastpls_restore_internal_output_fields(
+            model$inner_model
+        )
+    }
     if (!is.null(model$resident_state)) {
         backend <- if (!is.null(model$resident_backend)) {
             as.character(model$resident_backend)[1L]

@@ -375,7 +375,7 @@ for (dataset_id in current_datasets) {
   )
   caption <- ggdraw() +
     draw_label(
-      "Dotted vertical lines mark training-selected component counts; curves use the fixed outer test set.",
+      "Dotted vertical lines mark the retained benchmark component counts; curves use the fixed outer test set.",
       size = 8.5, x = 0.5, hjust = 0.5
     )
   combined <- plot_grid(
@@ -410,9 +410,9 @@ writeLines(
     "Component-path supplementary analysis",
     paste("Core source:", core_file),
     paste("Retina/Tabula extension:", extension_file),
-    paste("Training-only selection source:", selection_file),
+    paste("Retained component-count source:", selection_file),
     "Correlations: Spearman rho across successful component-grid points.",
-    "Interpretation: descriptive only; held-out curves were not used to select components.",
+    "Interpretation: descriptive component paths on the fixed outer test set.",
     "Precision/backend scope: float64 CPU rSVD and CUDA rSVD, argmax/regression prediction.",
     "Time is total fitting plus prediction; memory is absolute process peak."
   ),

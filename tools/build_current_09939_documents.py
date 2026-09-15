@@ -276,6 +276,10 @@ python_status = [
 python_large = rows("python_pls_large_all_runs.csv") if (
     TAB / "python_pls_large_all_runs.csv"
 ).exists() else []
+python_large = [
+    row for row in python_large
+    if row.get("implementation") == "sklearn_plsregression"
+]
 fig2 = rows("figure2_backend_runtime_ratios.csv")
 fig3 = rows("figure3_nmr_fixed165_summary.csv")
 nmr_path = rows("supplement_nmr_component_path.csv")
@@ -380,8 +384,6 @@ python_by_key = {
     for row in python_panel
 }
 python_labels = {
-    "nirs4all_methods_simpls": "nirs4all-methods SIMPLS",
-    "nirs4all_methods_rsvd": "nirs4all-methods randomized-SVD PLS",
     "sklearn_plsregression": "scikit-learn PLSRegression",
 }
 cifar_fast = next(
@@ -391,7 +393,6 @@ cifar_fast = next(
     None,
 )
 cifar_sklearn = python_by_key.get(("cifar100", "sklearn_plsregression"))
-cifar_nirs_rsvd = python_by_key.get(("cifar100", "nirs4all_methods_rsvd"))
 
 
 title = "fastPLS: accelerated SIMPLS for high-dimensional biomedical data with optional CUDA and Metal routes"
@@ -421,7 +422,7 @@ paragraph(main, "Keywords: partial least squares; SIMPLS; randomized singular va
 
 heading(main, "1. Introduction")
 paragraph(main, "Partial least squares (PLS) constructs latent components that maximize predictor-response association and is widely used when biomedical measurements are numerous, collinear or larger in number than the available samples [1]. PLS has supported metabolomic classification and prediction, including analyses of inflammatory metabolic phenotypes in prostate cancer [2]. It can also serve as supervised feature extraction: the latent scores retain response-relevant structure before a downstream classifier or retrieval method is applied.")
-paragraph(main, "Several PLS formulations address different computational and statistical settings. PLS-SVD derives directions from a singular value decomposition of the predictor-response cross-covariance, whereas SIMPLS extracts sequential components while preserving a deflation geometry in the original variable space [3]. Orthogonal PLS separates response-orthogonal variation [4], and kernel PLS permits nonlinear relations through a kernel representation [5]. The R package pls provides established implementations [6], while IKPLS supplies NumPy- and JAX-based improved-kernel PLS algorithms for CPU and GPU computation [7]. Python alternatives include the widely used scikit-learn PLSRegression estimator [17] and the compiled multi-solver nirs4all-methods engine [18].")
+paragraph(main, "Several PLS formulations address different computational and statistical settings. PLS-SVD derives directions from a singular value decomposition of the predictor-response cross-covariance, whereas SIMPLS extracts sequential components while preserving a deflation geometry in the original variable space [3]. Orthogonal PLS separates response-orthogonal variation [4], and kernel PLS permits nonlinear relations through a kernel representation [5]. The R package pls provides established implementations [6], while IKPLS supplies NumPy- and JAX-based improved-kernel PLS algorithms for CPU and GPU computation [7]. Python alternatives include the widely used scikit-learn PLSRegression estimator [17].")
 paragraph(main, "For large matrices, the dominant directions can be approximated without a complete singular value decomposition. Randomized SVD (rSVD) constructs a low-dimensional range approximation and can replace expensive dense decompositions when the leading subspace is sufficiently separated [8]. Its approximation depends on rank, oversampling, power iterations, conditioning and seed; therefore, computational gains must be interpreted together with numerical diagnostics.")
 paragraph(main, "Multivariate spectral prediction provides a demanding biomedical example. The deposited workflow associated with a recent NMR study predicted 28,355 diffusion-edited spectral intensities from 13,000 NOESY bins in 1,200 training spectra [9]. That implementation used PLS-SVD with an iterative Lanczos bidiagonalization solver and 165 components on its original workstation. The response dimension makes both fitting and prediction expensive, motivating a sequential SIMPLS implementation that approaches one-shot PLS-SVD execution while retaining the ability to construct many components.")
 paragraph(main, "Large embedding matrices create a related computational regime after feature extraction. Foundation models such as UNI and Prov-GigaPath produce dense representations for downstream computational pathology analyses [13,14]. We therefore include DINOv2 embeddings [10] derived from ImageNet [16] as an engineering stress test of million-sample matrix processing, not as evidence of biomedical predictive validity.")
@@ -466,7 +467,7 @@ paragraph(main, "For classification, argmax returns the largest predicted dummy-
 paragraph(main, "The compiled single and double cross-validation procedures preserve groups supplied through constrain, preventing observations from one subject from entering both training and validation folds. Component number and prediction-relevant model arguments can be selected using accuracy, balanced accuracy, RMSD or Q² as appropriate. Training R², independent-test Q² relative to the training mean and fold-based cross-validated Q² are returned as distinct quantities. Permutation p-values use the finite-sample correction (b + 1)/(B + 1); when groups are supplied, labels are permuted at the exchangeability-block level.")
 
 heading(main, "2.4 Benchmark design and data", 2)
-paragraph(main, "The classification comparison used CCLE, CIFAR-100 [15], GTEx v8, MetRef, Retina, Tabula Muris, TCGA-BRCA, TCGA-HNSC methylation and TCGA Pan-Cancer. CBMC CITE-seq and PRISM supplied multivariate regression workloads, and NMR was analysed separately. Dataset construction, preprocessing, dimensions, acquisition and redistribution restrictions are reported in Supplementary Tables S1 and S2. The same prepared train/test split, component count and precision were used within each paired comparison.")
+paragraph(main, "The classification comparison used CCLE, CIFAR-100 [15], GTEx v8, MetRef, Retina, Tabula Muris, TCGA-BRCA, TCGA-HNSC methylation and TCGA Pan-Cancer. CBMC CITE-seq and PRISM supplied multivariate regression workloads, and NMR was analysed separately. Dataset construction, preprocessing, dimensions, acquisition and redistribution restrictions are reported in Supplementary Tables S1 and S2. The same prepared train/test split, component count and precision were used within each paired comparison. Component-dependent predictive performance, fitting-plus-prediction time and host-memory paths for the eleven non-NMR benchmark datasets are reported in Supplementary Figures S1-S11; the retained component settings and their associations with predictive and computational metrics are summarized in Supplementary Tables S11 and S12.")
 paragraph(main, "The independent-implementation comparison used an Ubuntu 22.04 Linux workstation with an Intel Core i7-13700 processor and 32 GiB RAM. Every implementation used one effective CPU thread. The fastPLS 0.99.65 build was linked directly to OpenBLAS 0.3.29 and fitted SIMPLS with rSVD to centred float32 predictors. Component counts were fixed before this rerun from the training component-path analysis and are reported in Supplementary Table S11. The rSVD controls were oversampling 32, five power iterations and seed 123. Classification used latent-score LDA; regression returned continuous predictions and RMSD. Fitted responses, variance summaries and loading matrices were not requested; total time included fitting and held-out prediction. IKPLS used float32 and the same component count. R and Python implementations used the precision recorded for each workflow, and external classification scores were decoded by argmax where required. The comparison is therefore an end-to-end software comparison rather than an identical numerical-kernel comparison. Current fastPLS and IKPLS results for ordinary datasets are medians of ten isolated processes. ImageNet/DINOv2 used one run at 1,000 requested components, and other rows use the completed repetition count recorded in the source table. Complete-process resident set size (RSS), convergence failures and numerical warnings were retained.")
 paragraph(main, "The backend comparison evaluated PLS-SVD, SIMPLS, OPLS and kernel PLS on 11 non-NMR datasets using family-specific component counts selected from training data. CPU/CUDA and CPU/Metal ratios are paired within each workstation; values above one favour the accelerator. CUDA timing includes host-to-device transfer, fitting, synchronization, prediction and result transfer. Absolute RSS is a feasibility measure. Incremental RSS subtracts the baseline immediately before fitting, but still measures the complete process; GPU increments may include context and allocator initialization.")
 paragraph(main, "CPU thread scaling was evaluated separately with an OpenBLAS-linked build. Three controlled workloads represented sample-rich classification, predictor-wide regression and response-wide regression. One, two and four active OpenBLAS threads were verified directly before each fit, with five repetitions per setting and identical model controls.")
@@ -521,7 +522,7 @@ paragraph(main, f"In the matched controlled solver experiment, rSVD was {min(rsv
 backend_text = f"Accelerator benefit was conditional on matrix shape, model family and execution context (Figure 2). CUDA was faster than the paired CPU run in {cuda_faster} of {cuda_comparisons} fresh-process comparisons, with the clearest gains for larger dense products. The public Apple backend used the same fixed CPU/Metal operation split for every dataset: Metal evaluated fitting products involving the training sample matrix, while the CPU completed reduced decompositions, sequential PLS updates and compact prediction. It was faster than the paired Mac CPU run in {metal_faster} of {metal_comparisons} fresh-process comparisons. Incremental host RSS was lower than the paired CPU measurement in {cuda_lower_host_increment} CUDA and {metal_lower_host_increment} Metal comparisons."
 backend_text += " Every completed timing is shown, regardless of numerical agreement; Supplementary Tables S7 and S8 report paired metrics, host-memory measurements, CUDA device memory and executed residency."
 paragraph(main, backend_text)
-paragraph(main, "Verified four-thread CPU execution produced 1.21-fold, 1.03-fold and 1.77-fold speed-ups for the sample-rich, predictor-wide and response-wide controlled workloads, respectively, with identical predictions across thread counts (Supplementary Table S15 and Figure S15). Thus, a multithreaded build can accelerate matrix-heavy routes, but the sequential SIMPLS updates and workload balance limit scaling.")
+paragraph(main, "Verified four-thread CPU execution produced 1.21-fold, 1.03-fold and 1.77-fold speed-ups for the sample-rich, predictor-wide and response-wide controlled workloads, respectively, with identical predictions across thread counts (Supplementary Table S15 and Figures S15 and S16). Thus, a multithreaded build can accelerate matrix-heavy routes, but the sequential SIMPLS updates and workload balance limit scaling.")
 add_figure(main, "figure2_backend_runtime.png", "Figure 2. Paired CPU/accelerator runtime and incremental host-memory ratios for all selected family-dataset workloads. Runtime values are CPU time divided by CUDA or the fixed CPU/Metal operation split, so values above one favour the accelerator. Memory values are accelerator divided by CPU incremental host RSS, so values below one favour the accelerator. Fresh-process rows include device and pipeline initialization. Ratios are paired within each workstation; CUDA and Metal computers are not compared directly. Numerical differences and execution residency are reported in Supplementary Tables S7 and S8.", 6.65)
 
 heading(main, "3.3 Multivariate NMR prediction", 2)
@@ -604,7 +605,6 @@ references = [
     "[15] Krizhevsky A, Hinton G. Learning multiple layers of features from tiny images. Technical report. University of Toronto; 2009.",
     "[16] Deng J, Dong W, Socher R, Li LJ, Li K, Fei-Fei L. ImageNet: a large-scale hierarchical image database. IEEE Conference on Computer Vision and Pattern Recognition. 2009:248–255. doi:10.1109/CVPR.2009.5206848.",
     "[17] Pedregosa F, Varoquaux G, Gramfort A, et al. Scikit-learn: machine learning in Python. Journal of Machine Learning Research. 2011;12:2825–2830.",
-    "[18] Beurier G. nirs4all-methods: portable C++17 partial least-squares methods engine, version 1.0.18. 2026. https://methods.nirs4all.org/.",
 ]
 for ref in references:
     paragraph(main, ref)
@@ -644,7 +644,7 @@ acquisition_body = [
     ["Retina", "GEO GSE63472; 50-dimensional prepared representation", "Download/preparation script"],
     ["Tabula Muris", "Bioconductor ExperimentHub resource", "Bioconductor acquisition script"],
     ["CCLE, GTEx, TCGA, PRISM", "Public project resources subject to source terms", "Acquisition and harmonization scripts"],
-    ["NMR", "Study-specific prepared matrices associated with Vignoli et al. [9]", "Access subject to original study conditions"],
+    ["NMR", "Study-specific prepared matrices associated with Vignoli et al. [7]", "Access subject to original study conditions"],
     ["ImageNet/DINOv2", "Derived representation; no image files redistributed", "Current stress-test runner and manifest"],
 ]
 add_table(supp, "Table S2. Data acquisition and redistribution status.",
@@ -745,7 +745,6 @@ paragraph(supp, "A speed-up above one favours the optimized state. Negative RSS 
 software_capability_body = [
     ["fastPLS", "Compiled C++/linked BLAS", "Yes; verified OpenBLAS build", "CUDA", "Metal", "float32/float64, route-specific"],
     ["IKPLS", "NumPy or JAX", "Runtime dependent", "JAX-compatible", "Not evaluated", "float32/float64, runtime dependent"],
-    ["nirs4all-methods", "Compiled C++ through pls4all", "Linked BLAS/runtime dependent", "Not evaluated", "Not evaluated", "float64 in tested Python binding"],
     ["scikit-learn", "NumPy/SciPy", "Linked BLAS/runtime dependent", "No native PLS route", "No native PLS route", "float64 in tested route"],
     ["pls", "R/compiled numerical libraries", "Linked BLAS only", "No", "No", "R numeric float64"],
     ["plsgenomics", "R/compiled dependencies", "No package-level control", "No", "No", "R numeric float64"],

@@ -5,8 +5,7 @@ This benchmark separates two different questions:
 1. `benchmark_simpls_estimator_preservation.R` tests the deterministic de Jong
    SIMPLS numerical kernel against `pls::simpls.fit`.
 2. This directory compares complete prediction workflows against independent
-   Python implementations: IKPLS, the compiled `pls4all` binding from
-   nirs4all-methods, and scikit-learn `PLSRegression`. These packages implement
+   Python implementations: IKPLS and scikit-learn `PLSRegression`. These packages implement
    different PLS estimators and retain different fitted objects, so the panel is
    deliberately labelled an end-to-end software comparison rather than an
    estimator-equivalence test.
@@ -32,7 +31,7 @@ The runner gives `FASTPLS_BENCH_LIB` precedence over its temporary-library
 default so that every row is generated with the installed current release.
 
 The tested Python environment is pinned in `requirements.txt`; it contains
-IKPLS 6.1.2, pls4all 1.0.18, scikit-learn 1.7.2 and the supporting numerical
+IKPLS 6.1.2, scikit-learn 1.7.2 and the supporting numerical
 packages. The R worker requires the reviewed fastPLS release installed in the
 library selected by `R_LIBS`.
 
@@ -96,8 +95,7 @@ exported splits and component contract as the R implementations. The portable
 inputs are self-describing NumPy `.npy` arrays in C order. The route uses one
 effective CPU thread, no predictor or response scaling, and final held-out
 prediction as the common endpoint. Classification uses dummy responses and
-argmax decoding, as in the IKPLS workflow. nirs4all-methods is excluded from
-Figure 1.
+argmax decoding, as in the IKPLS workflow.
 
 Convert an existing portable raw export to standard NumPy files before the
 benchmark:

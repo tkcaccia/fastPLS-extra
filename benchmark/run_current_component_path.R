@@ -61,6 +61,10 @@ replicates <- as.integer(Sys.getenv("FASTPLS_COMPONENT_REPLICATES", "5"))
 if (!is.finite(replicates) || replicates < 1L) {
     stop("FASTPLS_COMPONENT_REPLICATES must be positive.", call. = FALSE)
 }
+component_ncores <- as.integer(Sys.getenv("FASTPLS_COMPONENT_NCORES", "1"))
+if (!is.finite(component_ncores) || component_ncores < 1L) {
+    stop("FASTPLS_COMPONENT_NCORES must be positive.", call. = FALSE)
+}
 component_precision <- tolower(Sys.getenv(
     "FASTPLS_COMPONENT_PRECISION",
     "float32"
@@ -84,6 +88,7 @@ all_datasets <- c(
     "tcga_pan_cancer"
 )
 all_families <- c("plssvd", "simpls", "opls", "kernelpls")
+all_classifiers <- c("argmax", "lda")
 
 split_selection <- function(value, choices, label) {
     if (!nzchar(value)) {
@@ -138,7 +143,7 @@ if (!"ncomp" %in% names(selected) &&
     "selected_ncomp" %in% names(selected)) {
     selected$ncomp <- selected$selected_ncomp
 }
-required <- c("dataset", "method", "ncomp")
+required <- c("dataset", "method", "ncomp", "grid_max")
 missing_columns <- setdiff(required, names(selected))
 if (length(missing_columns)) {
     stop(
@@ -203,29 +208,36 @@ write.csv(
 )
 
 component_grid <- function(dataset, method, metadata) {
-    selected_ncomp <- selected$ncomp[
+    selected_row <- selected[
         selected$dataset == dataset & selected$method == method
-    ]
-    if (length(selected_ncomp) != 1L) {
+    , , drop = FALSE]
+    if (nrow(selected_row) != 1L) {
         stop("Missing unique selected component for ", dataset, "/", method)
     }
+    selected_ncomp <- selected_row$ncomp[[1L]]
     upper <- min(metadata$n_train - 1L, metadata$p)
     if (identical(method, "plssvd")) {
-        upper <- min(upper, metadata$q)
+        response_limit <- if (metadata$task_type == "classification") {
+            metadata$q - 1L
+        } else {
+            metadata$q
+        }
+        upper <- min(upper, response_limit)
     }
     if (identical(method, "opls")) {
         upper <- upper - 1L
     }
+    upper <- min(upper, as.integer(selected_row$grid_max[[1L]]))
     sort(unique(c(base_grids[[dataset]], selected_ncomp)))[
         sort(unique(c(base_grids[[dataset]], selected_ncomp))) <= upper
     ]
 }
 
-make_config <- function(metadata, method, ncomp, backend, replicate) {
+make_config <- function(metadata, method, classifier, ncomp, backend, replicate) {
     list(
         run_id = paste(
             "component_path", metadata$dataset, method,
-            paste0("k", ncomp), backend, paste0("r", replicate),
+            classifier, paste0("k", ncomp), backend, paste0("r", replicate),
             sep = "__"
         ),
         experiment = "current_release_component_path",
@@ -234,7 +246,7 @@ make_config <- function(metadata, method, ncomp, backend, replicate) {
         method = method,
         backend = backend,
         precision = component_precision,
-        classifier = "argmax",
+        classifier = classifier,
         ncomp = as.integer(ncomp),
         replicate = as.integer(replicate),
         seed = as.integer(1000L + replicate),
@@ -260,7 +272,8 @@ make_config <- function(metadata, method, ncomp, backend, replicate) {
         north = 1L,
         scaling = "centering",
         save_diagnostics = FALSE,
-        save_prediction = FALSE
+        save_prediction = FALSE,
+        n.cores = component_ncores
     )
 }
 
@@ -269,16 +282,24 @@ for (index in seq_len(nrow(task_metadata))) {
     metadata <- task_metadata[index, , drop = FALSE]
     for (method in families) {
         grid <- component_grid(metadata$dataset, method, metadata)
-        for (ncomp in grid) {
-            for (backend in c("cpu", accelerator)) {
-                for (replicate in seq_len(replicates)) {
-                    configs[[length(configs) + 1L]] <- make_config(
-                        metadata,
-                        method,
-                        ncomp,
-                        backend,
-                        replicate
-                    )
+        classifiers <- if (metadata$task_type == "classification") {
+            all_classifiers
+        } else {
+            "argmax"
+        }
+        for (classifier in classifiers) {
+            for (ncomp in grid) {
+                for (backend in c("cpu", accelerator)) {
+                    for (replicate in seq_len(replicates)) {
+                        configs[[length(configs) + 1L]] <- make_config(
+                            metadata,
+                            method,
+                            classifier,
+                            ncomp,
+                            backend,
+                            replicate
+                        )
+                    }
                 }
             }
         }
@@ -479,6 +500,7 @@ writeLines(c(
     paste("selected_components:", selection_path),
     paste("precision:", component_precision),
     paste("replicates:", replicates),
+    paste("n.cores:", component_ncores),
     capture.output(sessionInfo())
 ), file.path(out_dir, "session_info.txt"))
 

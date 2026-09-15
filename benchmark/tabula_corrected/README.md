@@ -40,5 +40,5 @@ python3 benchmark/tabula_corrected/run_r_panel.py \
 ```
 
 Use `benchmark/ikpls_cross_language/export_panel_float32.R`, `run_panel.py`,
-and `run_python_pls_panel.py` for the component-matched IKPLS,
-nirs4all-methods, and scikit-learn rows.
+and `run_python_pls_panel.py` for the component-matched IKPLS and scikit-learn
+rows.

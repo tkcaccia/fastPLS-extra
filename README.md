@@ -1,37 +1,24 @@
 # fastPLS-extra
 
-Companion source repository for fastPLS extensions, reproducible benchmarks,
-and publication-generation code. This directory has not yet been published.
+Source repository for reproducible fastPLS benchmarks and
+publication-generation code. This directory has not yet been published.
 
-It contains a deliberately focused development R package named
-`fastPLSextra`. Install the current development fastPLS headers first, then use
-`R CMD INSTALL /path/to/fastPLS-extra`. Its only modelling interface is
-`pls_irlba()`, with `predict()` for held-out samples. It supplies the CPU
-float64 SIMPLS/IRLBA and PLS-SVD/IRLBA controls required by the manuscript's
-NMR benchmark. Cross-validation, standalone SVD, classification heads,
-float32 and accelerator IRLBA routes are intentionally excluded.
+This repository is not an installable R package and does not implement PLS or
+IRLBA. All supported modelling functions, including native rSVD, SIMPLS,
+PLS-SVD, OPLS, kernel PLS, classification and cross-validation, belong to the
+`fastPLS` package. Benchmark workers load an explicitly selected `fastPLS`
+installation and write generated evidence outside both source repositories.
 
-The intended dependency direction is `fastPLS-extra -> fastPLS`, never the
-reverse. Native rSVD, SIMPLS, PLS-SVD, OPLS, kernel PLS, classification and
-cross-validation remain in fastPLS. The companion includes the current fastPLS
-native headers at compilation, so its IRLBA controls use the same preprocessing,
-deflation, cached products, compact model representation and prediction path as
-the main implementation. Moving the solver must not duplicate the PLS engines
-or silently substitute a different estimator.
+References to IRLBA in deposited-result labels or manuscript comparison tables
+identify an external or previously deposited method. They are evidence
+metadata, not executable solver code in this repository.
 
 ## License Boundary
 
-The companion code is distributed under GPL-3, retaining any more specific
-third-party notices. This does not grant rights to relicense third-party code.
-Manuscript text, images and datasets require separate ownership and redistribution
-checks; the code license must not be assumed to cover them.
-
-The adapter includes the native PLS headers from the installed fastPLS
-package; it does not copy SIMPLS or PLS-SVD into this repository. The C solver
-sources in `src/` originate from the preserved GPL distribution. The local
-adaptation initializes its convergence flag explicitly. Dense full-subspace
-decompositions are identified separately in convergence records. Iterative
-nonconvergence raises an error, rather than returning an unchecked model.
+Repository code is distributed under GPL-3 unless a file carries a more
+specific notice. This does not grant rights to relicense third-party code.
+Manuscript text, images and datasets require separate ownership and
+redistribution checks; the code license must not be assumed to cover them.
 
 ## Boundary Checks
 
@@ -46,11 +33,9 @@ The audit records package metadata, file fingerprints, explicit notices,
 external includes and unresolved boundaries. Absence of a GPL comment is never
 treated as proof of MIT ownership.
 
-See [MIGRATION.md](MIGRATION.md) for the implementation and validation gates.
-
 Historical extraction snapshots and obsolete manuscript revisions are retained
-locally outside this Git checkout. They are not needed to build the companion
-package or reproduce the current benchmark workflows.
+locally outside this Git checkout. They are not needed to reproduce the current
+benchmark workflows.
 
 Shared validation runners are available here:
 
@@ -65,19 +50,6 @@ The source-package checker uses the existing local macOS/Metal check profile;
 it is not a substitute for CUDA or Windows checks. Its output records all
 remaining check notes and warnings. The installed-test runner does not install
 or choose a different package: its library path must be supplied explicitly.
-
-The working main package no longer compiles the bundled IRLBA sources.
-To verify the companion against saved comparison data without executing the
-old main-package IRLBA path:
-
-```sh
-Rscript tools/check_companion.R /path/to/current/companion/library \
-  /path/to/local/reference/records.rds \
-  /path/to/new/comparison/output
-```
-
-This executes only the current companion. The second argument is a read-only
-96-case result archive, not a package to load or execute.
 
 ## Benchmark And Publication Workflows
 

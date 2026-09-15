@@ -13,7 +13,7 @@ suppressPackageStartupMessages(library(fastPLS))
 
 profile_cores <- Sys.getenv("PROFILE_CORES", unset = "")
 if (nzchar(profile_cores)) {
-    options(cores = as.integer(profile_cores))
+    options(n.cores = as.integer(profile_cores))
 }
 
 script <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[[1L]])

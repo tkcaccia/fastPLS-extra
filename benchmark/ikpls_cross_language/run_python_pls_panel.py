@@ -24,7 +24,7 @@ DEFAULT_IMPLEMENTATIONS = (
 
 
 def write_environment(path: Path) -> None:
-    packages = ("numpy", "pandas", "psutil", "pls4all", "scikit-learn")
+    packages = ("numpy", "pandas", "psutil", "scikit-learn")
     rows = [
         ("python", sys.version.replace("\n", " ")),
         ("platform", platform.platform()),
@@ -108,7 +108,7 @@ def run_monitored(
         informative = [
             line.strip()
             for line in log_text.splitlines()
-            if "Error:" in line or "Pls4allError:" in line
+            if "Error:" in line
         ]
         tail = (
             informative[-1]

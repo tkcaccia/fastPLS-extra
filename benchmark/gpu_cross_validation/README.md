@@ -159,23 +159,44 @@ Rscript benchmark/gpu_cross_validation/summarize.R \
 
 `run_selected_matrix.R` runs all four fastPLS families at component counts
 already selected from training data. It executes complete cross-validation and
-one matched fold fit plus prediction for every backend and fresh-process
-replicate. The runner is resumable: an existing non-empty result CSV is not
-overwritten.
+one full-training fit plus prediction on the fixed test partition for every
+backend and fresh-process replicate. This direct comparison must not be
+confused with the older `K * one-fold fit` diagnostic. The runner is resumable:
+an existing non-empty result CSV is not overwritten.
+For classification, the prediction call retains raw class scores so its output
+contract matches the out-of-fold scores returned by cross-validation.
 
 ```sh
 Rscript benchmark/gpu_cross_validation/run_selected_matrix.R \
   --library=/path/to/fastPLS/library \
   --tasks=/path/to/task_objects \
-  --selection=/path/to/component_selection_summary.csv \
+  --selection=benchmark/gpu_cross_validation/selected_component_contract.csv \
   --output=/path/outside/git/platform_results \
   --backends=cpu,cuda \
   --repetitions=5 --kfold=10 --seed=123 \
   --precision=float32 --context-mode=cold
 ```
 
+On the 8-GiB Apple-silicon benchmark host, exclude ImageNet explicitly rather
+than attempting an out-of-fold score object that exceeds available memory:
+
+```sh
+Rscript benchmark/gpu_cross_validation/run_selected_matrix.R \
+  --library=/path/to/fastPLS/library \
+  --tasks=/path/to/task_objects \
+  --selection=benchmark/gpu_cross_validation/selected_component_contract.csv \
+  --output=/path/outside/git/macos_results \
+  --backends=cpu,metal --exclude-datasets=imagenet \
+  --repetitions=5 --kfold=10 --seed=123 \
+  --precision=float32 --context-mode=cold
+```
+
+NMR and ImageNet can be supplied without copying their large task objects into
+the ordinary task directory by adding `--nmr-task=/path/to/nmr_task.rds` and
+`--imagenet-task=/path/to/imagenet_task.rds`.
+
 Run the same command with `--backends=cpu,metal` on Apple silicon. Combine the
-platform directories and create the two supplementary figures with:
+platform directories and create the three supplementary figures with:
 
 ```sh
 Rscript benchmark/gpu_cross_validation/summarize_selected_matrix.R \
@@ -189,15 +210,23 @@ Rscript benchmark/gpu_cross_validation/audit_selected_matrix.R \
 The supplementary figures use cold fresh processes so first-call accelerator
 context creation, transfer, and synchronization are included consistently with
 the complete-workflow benchmark. The first figure reports the same-host
-CPU/accelerator cross-validation runtime ratio. The second reports `(K *
-one-fold fit-and-prediction time) / complete CV time`. Ratios above one favour
-the accelerator in the first figure and the complete CV implementation in the
-second. Held-out metrics for the standalone fold are calculated after the timed
-fit-and-prediction call. Raw and summarized results remain outside this Git
-repository.
-The audit requires all 1,760 platform cells, checks the five-repetition
-contract, confirms paired fold signatures and prediction stability, and writes
-the maximum observed CPU/accelerator metric differences.
+CPU/accelerator cross-validation runtime ratio. The second reports `complete
+ten-fold CV time / one full-training fit plus fixed-test prediction time`.
+An additional efficiency figure reports `complete ten-fold CV time /
+(10 * one full-training fit plus fixed-test prediction time)` so the compiled
+CV workflow is compared directly with ten repeated public workflows.
+Ratios above one favour the accelerator in the first figure; in the
+second they show the complete multiplicative cost of CV, including documented
+out-of-fold predictions and scores. Raw and summarized results remain outside
+this Git repository. In the CV-versus-fit figure, white marks the expected
+ten-fit reference at 10x, blue denotes ratios below 10x, and red denotes ratios
+above 10x.
+The audit requires all 2,000 feasible platform cells: all 13 datasets on the
+Linux/NVIDIA workstation and 12 datasets on the 8-GiB Mac. ImageNet is retained
+as an explicit `NE` cell on the Mac because the public 1,000-component
+out-of-fold score output exceeds that workstation's memory budget. The audit
+checks the five-repetition contract, paired fold signatures, prediction
+stability, and maximum CPU/accelerator metric differences.
 
 For a matched baseline/candidate ablation, use `run_matched_pair.sh`. It
 alternates the two installed libraries in fresh processes to reduce timing

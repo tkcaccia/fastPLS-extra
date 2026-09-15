@@ -46,7 +46,7 @@ def build_supplement_stages(source, library, results, tasks, accelerator,
             "python3", source / "benchmark/ikpls_cross_language/run_benchmark.py",
             results / "cross_language_fastpls",
         ], {"FASTPLS_IKPLS_INPUTS": str(cross_language_inputs),
-            "FASTPLS_IKPLS_IMPLEMENTATIONS": "fastPLS_irlba,fastPLS_rsvd",
+            "FASTPLS_IKPLS_IMPLEMENTATIONS": "fastPLS_rsvd",
             "FASTPLS_BENCH_BACKEND": "cpu"})
     else:
         pending.append({"panel": "cross_language_fastpls_only",
@@ -97,7 +97,7 @@ def build_supplement_stages(source, library, results, tasks, accelerator,
 
     if nmr is not None:
         for family in ("plssvd", "simpls"):
-            for backend, solver in (("cpu", "irlba"), ("cpu", "rsvd"),
+            for backend, solver in (("cpu", "rsvd"),
                                     (accelerator, "rsvd")):
                 for components in sorted({5 if family == "plssvd" else 50, 50, 165}):
                     name = f"nmr_float32_{family}_{backend}_{solver}_{components}"

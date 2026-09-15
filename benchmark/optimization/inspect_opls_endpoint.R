@@ -4,7 +4,7 @@ args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) == 4L)
 .libPaths(unique(c(args[[1L]], .libPaths())))
 suppressPackageStartupMessages(library(fastPLS))
-options(backend = "cpu", cores = 1L)
+options(backend = "cpu", n.cores = 1L)
 task <- readRDS(args[[2L]])
 cfg <- readRDS(args[[3L]])
 if (is.null(cfg$run_id)) {

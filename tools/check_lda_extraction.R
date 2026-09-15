@@ -3,7 +3,7 @@ stopifnot(length(args) %in% c(2L, 3L),
     !grepl("frozen|ikpls", args[[1L]], ignore.case = TRUE))
 .libPaths(c(normalizePath(args[[1L]]), .libPaths()))
 suppressPackageStartupMessages(library(fastPLS))
-options(backend = "cpu", cores = 1L)
+options(backend = "cpu", n.cores = 1L)
 set.seed(697)
 x <- matrix(rnorm(60 * 7), 60, 7)
 y <- rep(1:3, each = 20)

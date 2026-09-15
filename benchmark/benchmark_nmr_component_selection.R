@@ -15,7 +15,10 @@ get_arg <- function(name, default = NULL) {
 input <- get_arg("input")
 out_dir <- get_arg("out")
 backend <- match.arg(get_arg("backend", "cuda"), c("cpu", "cuda", "metal"))
-method <- match.arg(get_arg("method", "simpls"), c("simpls", "plssvd"))
+method <- match.arg(
+  get_arg("method", "simpls"),
+  c("simpls", "plssvd", "opls", "kernelpls")
+)
 precision <- match.arg(
   get_arg("precision", if (backend == "metal") "float32" else "float64"),
   c("float32", "float64")
@@ -123,8 +126,9 @@ for (split_index in seq_along(seeds)) {
         X_fit,
         Y_fit,
         ncomp = grid, method = method, backend = backend,
-        svd.method = "rsvd", scaling = "centering", fit = FALSE,
-        return_variance = FALSE, seed = fit_seed
+        scaling = "centering", fit = FALSE,
+        return_variance = FALSE, seed = fit_seed,
+        north = 1L, kernel = "linear"
     )
     if (!automatic_controls) {
       fit_arguments$oversample <- oversample
@@ -278,6 +282,10 @@ write_fastpls_nmr_manifest(
     method = method,
     scoring_contract = if (method == "plssvd") {
       "centered validation X times R-prefix times C-prefix times Q-prefix transpose plus training response mean"
+    } else if (method == "opls") {
+      "validation X transformed by the fitted one-component OPLS filter, then projected through the inner SIMPLS R/Q prefixes"
+    } else if (method == "kernelpls") {
+      "linear-kernel direct route projected through the SIMPLS R/Q prefixes"
     } else {
       "centered validation X times R-prefix times Q-prefix transpose plus training response mean"
     },

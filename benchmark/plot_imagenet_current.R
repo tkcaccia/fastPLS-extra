@@ -97,7 +97,7 @@ time_data <- rbind(
     ),
     data.frame(
         classifier = head_summary$classifier_label,
-        stage = "Top-5 prediction",
+        stage = "Top-5 prediction + evaluation",
         seconds = head_summary$top5_prediction_time_sec
     )
 )
@@ -145,7 +145,7 @@ panel_b <- ggplot(time_data, aes(classifier, seconds, fill = stage)) +
     geom_col(position = "stack", width = 0.62) +
     scale_fill_manual(values = c(
         "PLS fit" = "#4C78A8",
-        "Top-5 prediction" = "#F2A541"
+        "Top-5 prediction + evaluation" = "#F2A541"
     )) +
     labs(
         title = "B  Runtime by classification head",
@@ -179,7 +179,8 @@ combined <- panel_a / (panel_b + panel_c) +
             toupper(paste(unique(data$backend), collapse = "/")),
             " SIMPLS-rSVD; ",
             control_label, "; ", single_label(data$seed, "seed"), "\n",
-            split_label, "; one shared component path per head"
+            split_label, "; one shared component path per head\n",
+            "Top-5 results returned by the public prediction and evaluation API"
         )
     ) &
     theme(

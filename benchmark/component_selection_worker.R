@@ -83,6 +83,7 @@ row <- data.frame(
   package_version = package_version,
   dataset = config$dataset,
   family = config$family,
+  classifier = config$classifier,
   task_type = if (classification) "classification" else "regression",
   selection_metric = config$selection_metric,
   selected_ncomp = NA_integer_,
@@ -111,13 +112,13 @@ tryCatch({
     scaling = "centering",
     method = config$family,
     backend = "cpu",
-    svd.method = "rsvd",
+    svd.method = "cpu_rsvd",
     north = 1L,
     kernel = "linear",
     gamma = NULL,
     degree = 3L,
     coef0 = 1,
-    classifier = "argmax",
+    classifier = config$classifier,
     xprod = NULL,
     svd_dots = list()
   )
@@ -127,21 +128,27 @@ tryCatch({
     constrain = NULL,
     config = model_config,
     seed = config$seed,
-    selection_metric = config$selection_metric
+    selection_metric = config$selection_metric,
+    n.cores = config$n.cores %||% 1L
   )
-  engine_arguments <- fastPLS:::.single_cv_engine_arguments(
-    context,
-    ncomp = config$grid,
-    kfold = config$kfold
-  )
-  engine_arguments$backend <- context$backend_compiled
-  engine_arguments$store_predictions <- FALSE
-  engine_arguments$return_scores <- FALSE
-
   elapsed <- system.time({
-    cv <- do.call(fastPLS:::.pls_cv_compiled, engine_arguments)
+    cv <- fastPLS::pls.single.cv(
+      X,
+      Y,
+      ncomp = config$grid,
+      kfold = config$kfold,
+      method = config$family,
+      backend = "cpu",
+      classifier = config$classifier,
+      north = 1L,
+      kernel = "linear",
+      fit = FALSE,
+      selection = config$selection_metric,
+      seed = config$seed,
+      n.cores = config$n.cores %||% 1L
+    )
   })[["elapsed"]]
-  metrics <- cv$metrics
+  metrics <- cv$selection_metrics
   if (!is.data.frame(metrics) || nrow(metrics) != length(config$grid)) {
     stop("The compiled CV engine returned an incomplete metric path.")
   }
@@ -181,6 +188,7 @@ tryCatch({
     package_version = package_version,
     dataset = config$dataset,
     family = config$family,
+    classifier = config$classifier,
     task_type = row$task_type,
     selection_metric = config$selection_metric,
     ncomp = config$grid,

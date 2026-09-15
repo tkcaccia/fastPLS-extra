@@ -288,7 +288,7 @@ if (identical(mode, "run_one") || identical(mode, "write_failure")) {
       pred <- predict(
         fit,
         task$Xtest,
-        top5 = identical(task$task_type, "classification"),
+        top = if (identical(task$task_type, "classification")) 5L else NULL,
         backend = backend
       )
     })[["elapsed"]]

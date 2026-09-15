@@ -817,18 +817,14 @@ variant_specs <- function() {
   gpu_code <- benchmark_gpu_backend_code(gpu_backend)
   rows <- list(
     c("cpp_plssvd_cpu_rsvd", "plssvd", "CPU", "cpu_rsvd", "Cpp", "argmax", ""),
-    c("cpp_plssvd_irlba", "plssvd", "CPU", "irlba", "Cpp", "argmax", ""),
     c("gpu_plssvd_rsvd", "plssvd", "GPU", gpu_code, gpu_label, "argmax", gpu_backend),
     c("cpp_simpls_cpu_rsvd", "simpls", "CPU", "cpu_rsvd", "Cpp", "argmax", ""),
-    c("cpp_simpls_irlba", "simpls", "CPU", "irlba", "Cpp", "argmax", ""),
     c("gpu_simpls_rsvd", "simpls", "GPU", gpu_code, gpu_label, "argmax", gpu_backend),
     c("pls_pkg_simpls", "simpls", "CPU", "pls_pkg", "pls_pkg", "argmax", ""),
     c("cpp_kernelpls_cpu_rsvd", "kernelpls", "CPU", "cpu_rsvd", "Cpp", "argmax", ""),
-    c("cpp_kernelpls_irlba", "kernelpls", "CPU", "irlba", "Cpp", "argmax", ""),
     c("gpu_kernelpls_rsvd", "kernelpls", "GPU", gpu_code, gpu_label, "argmax", gpu_backend),
     c("pls_pkg_kernelpls", "kernelpls", "CPU", "pls_pkg", "pls_pkg", "argmax", ""),
     c("cpp_opls_cpu_rsvd", "opls", "CPU", "cpu_rsvd", "Cpp", "argmax", ""),
-    c("cpp_opls_irlba", "opls", "CPU", "irlba", "Cpp", "argmax", ""),
     c("gpu_opls_rsvd", "opls", "GPU", gpu_code, gpu_label, "argmax", gpu_backend),
     c("pls_pkg_opls", "opls", "CPU", "pls_pkg", "pls_pkg", "argmax", "")
   )

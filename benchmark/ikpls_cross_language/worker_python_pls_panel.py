@@ -3,6 +3,7 @@
 
 import csv
 import importlib.metadata
+import json
 from pathlib import Path
 import sys
 import time
@@ -13,8 +14,6 @@ import psutil
 
 
 IMPLEMENTATIONS = {
-    "nirs4all_methods_simpls",
-    "nirs4all_methods_rsvd",
     "sklearn_plsregression",
 }
 
@@ -41,29 +40,6 @@ def balanced_accuracy(
 
 
 def make_model(implementation: str, ncomp: int):
-    if implementation in {
-        "nirs4all_methods_simpls",
-        "nirs4all_methods_rsvd",
-    }:
-        from pls4all.sklearn import PLSRegression
-
-        solver = (
-            "simpls"
-            if implementation == "nirs4all_methods_simpls"
-            else "randomized-svd"
-        )
-        model = PLSRegression(
-            n_components=ncomp,
-            solver=solver,
-            center_x=True,
-            scale_x=False,
-            center_y=True,
-            scale_y=False,
-            store_scores=False,
-        )
-        label = "SIMPLS" if solver == "simpls" else "randomized-SVD PLS"
-        return model, "pls4all", f"nirs4all-methods {label}"
-
     if implementation == "sklearn_plsregression":
         from sklearn.cross_decomposition import PLSRegression
 
@@ -77,6 +53,82 @@ def make_model(implementation: str, ncomp: int):
         return model, "scikit-learn", "scikit-learn PLSRegression"
 
     raise ValueError(f"Unknown implementation: {implementation}")
+
+
+def load_inputs(dataset_dir: Path, meta: dict[str, str]):
+    n_train = int(meta["n_train"])
+    n_test = int(meta["n_test"])
+    p = int(meta["p"])
+    q = int(meta["q"])
+    task_type = meta["task_type"]
+    metadata_json = dataset_dir / "metadata.json"
+    if metadata_json.is_file():
+        with metadata_json.open() as handle:
+            portable = json.load(handle)
+        if portable.get("format") != "fastPLS Python benchmark NumPy v1":
+            raise ValueError("Unsupported NumPy benchmark format")
+        # Copy-on-write mappings permit estimators that center in place while
+        # guaranteeing that the portable source arrays remain unchanged.
+        Xtrain = np.load(dataset_dir / "X_train.npy", mmap_mode="c")
+        Xtest = np.load(dataset_dir / "X_test.npy", mmap_mode="c")
+        Ytrain = np.load(dataset_dir / "Y_train.npy", mmap_mode="c")
+        Ytest = np.load(
+            dataset_dir
+            / (
+                "y_test.npy"
+                if task_type == "classification"
+                else "Y_test.npy"
+            ),
+            mmap_mode="c",
+        )
+        input_format = "npy"
+    else:
+        Xtrain = np.fromfile(
+            dataset_dir / "Xtrain.f32", dtype="<f4"
+        ).reshape(n_train, p)
+        Xtest = np.fromfile(
+            dataset_dir / "Xtest.f32", dtype="<f4"
+        ).reshape(n_test, p)
+        Ytrain = np.fromfile(
+            dataset_dir / "Ytrain.f32", dtype="<f4"
+        ).reshape(n_train, q)
+        if task_type == "classification":
+            Ytest = np.fromfile(dataset_dir / "Ytest.i32", dtype="<i4")
+        else:
+            Ytest = np.fromfile(
+                dataset_dir / "Ytest.f32", dtype="<f4"
+            ).reshape(n_test, q)
+        input_format = "raw"
+
+    expected = ((n_train, p), (n_test, p), (n_train, q))
+    observed = (Xtrain.shape, Xtest.shape, Ytrain.shape)
+    if observed != expected:
+        raise ValueError(f"Input shape mismatch: expected {expected}, observed {observed}")
+    expected_ytest = (n_test,) if task_type == "classification" else (n_test, q)
+    if Ytest.shape != expected_ytest:
+        raise ValueError(
+            f"Test-response shape mismatch: expected {expected_ytest}, observed {Ytest.shape}"
+        )
+    if (
+        Xtrain.dtype != np.float32
+        or Xtest.dtype != np.float32
+        or Ytrain.dtype != np.float32
+    ):
+        raise TypeError("Portable predictors and training responses must be float32")
+    if (
+        not np.isfinite(Xtrain).all()
+        or not np.isfinite(Xtest).all()
+        or not np.isfinite(Ytrain).all()
+    ):
+        raise ValueError("Predictors and training responses must be finite")
+    if task_type == "classification":
+        if not np.issubdtype(Ytest.dtype, np.integer):
+            raise TypeError("Classification test labels must be integer encoded")
+        if np.any((Ytest < 0) | (Ytest >= q)):
+            raise ValueError("Classification test labels are outside the response columns")
+    elif not np.isfinite(Ytest).all():
+        raise ValueError("Regression test responses must be finite")
+    return Xtrain, Xtest, Ytrain, Ytest, input_format
 
 
 if len(sys.argv) != 5:
@@ -100,24 +152,7 @@ q = int(meta["q"])
 ncomp = int(meta["ncomp"])
 task_type = meta["task_type"]
 
-# Both compared Python APIs execute these estimators in float64. Conversion is
-# completed before the pre-fit baseline and timer so timing measures the model
-# workflow rather than the interchange format.
-Xtrain = np.fromfile(
-    dataset_dir / "Xtrain.f32", dtype="<f4"
-).reshape(n_train, p).astype(np.float64)
-Xtest = np.fromfile(
-    dataset_dir / "Xtest.f32", dtype="<f4"
-).reshape(n_test, p).astype(np.float64)
-Ytrain = np.fromfile(
-    dataset_dir / "Ytrain.f32", dtype="<f4"
-).reshape(n_train, q).astype(np.float64)
-if task_type == "classification":
-    Ytest = np.fromfile(dataset_dir / "Ytest.i32", dtype="<i4")
-else:
-    Ytest = np.fromfile(
-        dataset_dir / "Ytest.f32", dtype="<f4"
-    ).reshape(n_test, q).astype(np.float64)
+Xtrain, Xtest, Ytrain, Ytest, input_format = load_inputs(dataset_dir, meta)
 
 process = psutil.Process()
 prefit_rss_mib = process.memory_info().rss / 1024**2
@@ -166,12 +201,11 @@ row = {
     "package": distribution,
     "package_version": importlib.metadata.version(distribution),
     "algorithm": algorithm,
-    "solver_controls": (
-        "package defaults; randomized controls not exposed by binding"
-        if implementation == "nirs4all_methods_rsvd"
-        else "package defaults"
-    ),
+    "solver_controls": "tol=1e-6; max_iter=500",
     "precision": "float64",
+    "input_precision": "float32",
+    "input_format": input_format,
+    "model_precision": str(np.asarray(model.coef_).dtype),
     "replicate": replicate,
     "n_train": n_train,
     "n_test": n_test,

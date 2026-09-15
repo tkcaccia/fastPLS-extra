@@ -23,6 +23,13 @@ rss_mb <- function() {
   if (!length(line)) return(NA_real_)
   as.numeric(sub("^VmRSS:\\s*([0-9.]+).*", "\\1", line[[1L]])) / 1024
 }
+peak_rss_mb <- function() {
+  if (!file.exists("/proc/self/status")) return(NA_real_)
+  line <- grep("^VmHWM:", readLines("/proc/self/status", warn = FALSE),
+               value = TRUE)
+  if (!length(line)) return(NA_real_)
+  as.numeric(sub("^VmHWM:\\s*([0-9.]+).*", "\\1", line[[1L]])) / 1024
+}
 gpu_used_mb <- function() {
   value <- tryCatch(
     suppressWarnings(system2(
@@ -65,33 +72,42 @@ component_value <- function(x, ncomp, index, effective_ncomp = ncomp) {
   if (length(dims) == 2L && ncol(x) == 1L) return(x[, 1L])
   x
 }
-classification_metrics <- function(truth, predicted, top_labels) {
+api_classification_metrics <- function(prediction, index) {
+  evaluation <- prediction$metrics
+  if (is.null(evaluation$by_component) ||
+      length(evaluation$by_component) < index) {
+    stop("predict() did not return per-component evaluation results")
+  }
+  component <- evaluation$by_component[[index]]
+  ordinary <- component$metrics
+  topk <- component$topk
+  top5_row <- which(as.integer(topk$k) == 5L)
+  if (nrow(ordinary) != 1L || !length(top5_row)) {
+    stop("predict() evaluation does not contain the requested top-5 result")
+  }
+  c(
+    top1_accuracy = ordinary$accuracy[[1L]],
+    top5_accuracy = topk$accuracy[[top5_row[[1L]]]],
+    balanced_accuracy = ordinary$balanced_accuracy[[1L]],
+    macro_f1 = ordinary$macro_f1[[1L]]
+  )
+}
+audit_api_metrics <- function(truth, predicted, top_labels, metrics) {
   truth <- as.character(truth)
   predicted <- as.character(predicted)
   top_labels <- as.matrix(top_labels)
-  top5 <- mean(vapply(seq_along(truth), function(i) {
-    truth[[i]] %in% top_labels[i, seq_len(min(5L, ncol(top_labels)))]
-  }, logical(1L)))
-  lev <- sort(unique(truth))
-  tab <- table(
-    factor(truth, levels = lev),
-    factor(predicted, levels = lev)
-  )
-  support <- rowSums(tab)
-  predicted_n <- colSums(tab)
-  recall <- ifelse(support > 0, diag(tab) / support, NA_real_)
-  precision <- ifelse(predicted_n > 0, diag(tab) / predicted_n, 0)
-  f1 <- ifelse(
-    is.finite(precision + recall) & precision + recall > 0,
-    2 * precision * recall / (precision + recall),
-    0
-  )
-  c(
-    top1_accuracy = mean(predicted == truth),
-    top5_accuracy = top5,
-    balanced_accuracy = mean(recall, na.rm = TRUE),
-    macro_f1 = mean(f1, na.rm = TRUE)
-  )
+  if (length(predicted) != length(truth) || nrow(top_labels) != length(truth)) {
+    stop("Prediction dimensions do not match the held-out labels")
+  }
+  top1 <- mean(predicted == truth)
+  truth_matrix <- matrix(truth, nrow = length(truth), ncol = ncol(top_labels))
+  top5 <- mean(rowSums(top_labels == truth_matrix) > 0L)
+  if (!isTRUE(all.equal(top1, unname(metrics[["top1_accuracy"]]),
+                        tolerance = 1e-12)) ||
+      !isTRUE(all.equal(top5, unname(metrics[["top5_accuracy"]]),
+                        tolerance = 1e-12))) {
+    stop("predict() evaluation metrics disagree with returned class predictions")
+  }
 }
 
 lib <- env("FASTPLS_LIB")
@@ -123,7 +139,7 @@ output_csv <- path.expand(env(
   "imagenet_current_fused_lda.csv"
 ))
 ncomp_grid <- as.integer(strsplit(env(
-  "NCOMP_GRID", "100,200,300,400,500,600,700,800,900,1000"
+  "NCOMP_GRID", "50,100,200,300,400,500,600,700,800,900,1000"
 ), ",", fixed = TRUE)[[1L]])
 ncomp_grid <- sort(unique(ncomp_grid[is.finite(ncomp_grid) & ncomp_grid > 0L]))
 if (!length(ncomp_grid)) stop("NCOMP_GRID must contain positive integers")
@@ -188,6 +204,7 @@ row_template <- data.frame(
   model_gpu_resident = NA,
   fit_residency = NA_character_,
   prediction_residency = NA_character_,
+  metric_source = "predict(Ytest=..., top=5)$metrics",
   audit_status = "approximate_workflow_result",
   loaded_package_path = loaded_package_path,
   loaded_package_version = loaded_package_version,
@@ -264,7 +281,6 @@ tryCatch({
     Ytrain = task$Ytrain,
     ncomp = ncomp_grid,
     method = method,
-    svd.method = "rsvd",
     backend = "cuda",
     classifier = classifier,
     scaling = "centering",
@@ -361,13 +377,20 @@ tryCatch({
     pred <- predict(
       fit,
       Xtest,
+      Ytest = task$Ytest,
       top = 5L,
-      top5 = TRUE,
       backend = "cuda"
     )
   })[["elapsed"]])
   rss_after_top5 <- rss_mb()
   gpu_after_top5 <- gpu_used_mb()
+  process_peak_rss <- peak_rss_mb()
+  gpu_observations <- c(gpu_before_fit, gpu_after_fit, gpu_after_top5)
+  gpu_peak <- if (any(is.finite(gpu_observations))) {
+    max(gpu_observations, na.rm = TRUE)
+  } else {
+    NA_real_
+  }
 
   effective <- as.integer(internal$ncomp)
   for (i in seq_along(ncomp_grid)) {
@@ -375,7 +398,8 @@ tryCatch({
     effective_k <- if (length(effective) >= i) effective[[i]] else k
     predicted <- component_value(pred$Ypred, k, i, effective_k)
     top_labels <- component_value(pred$Ypred_top, k, i, effective_k)
-    metrics <- classification_metrics(task$Ytest, predicted, top_labels)
+    metrics <- api_classification_metrics(pred, i)
+    audit_api_metrics(task$Ytest, predicted, top_labels, metrics)
     rows[[i]]$ncomp_effective <- effective_k
     rows[[i]]$control_profile <- control_profile
     rows[[i]]$effective_oversample <- effective_oversample
@@ -394,6 +418,11 @@ tryCatch({
     rows[[i]]$gpu_before_fit_mb <- gpu_before_fit
     rows[[i]]$rss_after_top5_mb <- rss_after_top5
     rows[[i]]$gpu_after_top5_mb <- gpu_after_top5
+    rows[[i]]$gpu_peak_mb <- gpu_peak
+    rows[[i]]$gpu_incremental_peak_mb <- gpu_peak - gpu_before_fit
+    rows[[i]]$process_peak_rss_mb <- process_peak_rss
+    rows[[i]]$incremental_peak_rss_mb <-
+      process_peak_rss - rows[[i]]$rss_before_data_mb
     rows[[i]]$executed_estimator <- executed_estimator
     rows[[i]]$prediction_backend <- prediction_backend
     rows[[i]]$classifier_train_backend <- classifier_train_backend

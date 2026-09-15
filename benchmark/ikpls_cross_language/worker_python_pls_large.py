@@ -14,8 +14,6 @@ import psutil
 
 
 IMPLEMENTATIONS = {
-    "nirs4all_methods_simpls",
-    "nirs4all_methods_rsvd",
     "sklearn_plsregression",
 }
 
@@ -29,31 +27,6 @@ def read_metadata(path: Path) -> dict[str, str]:
 
 
 def make_model(implementation: str, ncomp: int):
-    if implementation in {
-        "nirs4all_methods_simpls",
-        "nirs4all_methods_rsvd",
-    }:
-        from pls4all.sklearn import PLSRegression
-
-        solver = (
-            "simpls"
-            if implementation == "nirs4all_methods_simpls"
-            else "randomized-svd"
-        )
-        return (
-            PLSRegression(
-                n_components=ncomp,
-                solver=solver,
-                center_x=False,
-                scale_x=False,
-                center_y=False,
-                scale_y=False,
-                store_scores=False,
-            ),
-            "pls4all",
-            "nirs4all-methods "
-            + ("SIMPLS" if solver == "simpls" else "randomized-SVD PLS"),
-        )
     if implementation == "sklearn_plsregression":
         from sklearn.cross_decomposition import PLSRegression
 
@@ -209,11 +182,7 @@ row = {
     "package": distribution,
     "package_version": importlib.metadata.version(distribution),
     "algorithm": algorithm,
-    "solver_controls": (
-        "package defaults; randomized controls not exposed by binding"
-        if implementation == "nirs4all_methods_rsvd"
-        else "package defaults"
-    ),
+    "solver_controls": "package defaults",
     "precision": "float64 native; float32 interchange",
     "replicate": replicate,
     "n_train": n_train,

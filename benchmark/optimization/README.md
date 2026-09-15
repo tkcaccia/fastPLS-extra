@@ -81,6 +81,12 @@ stand in for the publication's whole-workflow or frozen-result comparisons.
 `validate_cpu_prediction_prefix.py --validation-only` separately checks the
 installed candidate and CPU/Metal CV results.
 
+`validate_large_response_route.R` records component-wise accuracy or RMSD,
+rSVD controls, execution route, fitting time, and prediction time for a named
+current-code task. It is intended for regression guards such as NMR after a
+classification-specific optimization; it writes only to an explicit path
+outside the repository.
+
 `validate_cpu_flash_memory.py` uses independent current-code workers for
 prediction-only memory measurements. It reports sampled complete-process RSS,
 the pre-prediction baseline, and their difference. Runtime sampling, allocator

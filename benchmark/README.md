@@ -113,8 +113,8 @@ scripts/run_controlled_scaling.sh RESULTS_DIR qualification cuda 3
 - The ImageNet scripts assess float32 DINOv2 feature processing as an
   exploratory foundation-model embedding stress test. The manuscript reports
   this separately from biomedical predictive validation.
-- `ikpls_cross_language/` contains the matched comparison with IKPLS,
-  nirs4all-methods and scikit-learn, including guarded NMR and ImageNet
+- `ikpls_cross_language/` contains the matched comparison with IKPLS and
+  scikit-learn, including guarded NMR and ImageNet
   feasibility extensions. Estimators, native precision, warnings, failures
   and retained-output contracts remain explicit.
 

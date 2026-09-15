@@ -60,7 +60,7 @@ def main():
     plan = []
     for family in ("plssvd", "simpls"):
         selected = read_selection(args.selections / ("selection_" + family))
-        for backend, solver in (("cpu", "irlba"), ("cpu", "rsvd"),
+        for backend, solver in (("cpu", "rsvd"),
                                 (args.accelerator, "rsvd")):
             name = f"{family}_{backend}_{solver}"
             command = ["python3", args.source / "benchmark/optimization/run_metal_nmr_workspace.py",

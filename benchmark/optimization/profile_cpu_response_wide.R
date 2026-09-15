@@ -8,7 +8,7 @@ output <- args[[3L]]
 dir.create(output, recursive = TRUE, showWarnings = FALSE)
 .libPaths(unique(c(library_path, .libPaths())))
 suppressPackageStartupMessages(library(fastPLS))
-options(backend = "cpu", cores = 1L)
+options(backend = "cpu", n.cores = 1L)
 Sys.setenv(FASTPLS_BENCH_PHASE_TIMING = "1")
 
 # Reuse the exact task generator without executing the benchmark worker.

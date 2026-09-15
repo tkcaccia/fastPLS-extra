@@ -17,14 +17,12 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 WORKER = HERE / "worker_python_pls_large.py"
 IMPLEMENTATIONS = (
-    "nirs4all_methods_simpls",
-    "nirs4all_methods_rsvd",
     "sklearn_plsregression",
 )
 
 
 def write_environment(path: Path, memory_limit_gib: float) -> None:
-    packages = ("numpy", "pandas", "psutil", "pls4all", "scikit-learn")
+    packages = ("numpy", "pandas", "psutil", "scikit-learn")
     rows = [
         ("python", sys.version.replace("\n", " ")),
         ("platform", platform.platform()),

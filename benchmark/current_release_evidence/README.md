@@ -9,9 +9,9 @@ package version rather than assigning a historical version to new output.
 time is not part of fitting or prediction. It starts process-memory monitoring
 only after the prepared matrices are resident and garbage collection has run.
 
-`run_solver_comparison.py` compares public rSVD with the CPU float64 IRLBA
-companion while holding data, PLS family, component count, preprocessing, and
-prediction output fixed. IRLBA remains a GPL comparison route in fastPLSextra.
+The former executable IRLBA companion comparison has been removed. Any IRLBA
+rows retained in publication inputs identify deposited comparison evidence;
+current benchmark workers execute only supported fastPLS rSVD routes.
 
 The verified one-, two-, and four-thread experiment remains in
 `benchmark/multicore_scaling/` and requires an OpenBLAS-linked fastPLS build.
@@ -33,6 +33,27 @@ quadratic Gram storage is not feasible for large-sample tasks. The companion
 status, memory, and float32 metric differences from CPU float64. IKPLS rows are
 attached only to SIMPLS because IKPLS is not an estimator comparator for the
 other three families. All raw outputs must remain outside the Git checkout.
+
+Publication Figure 2 uses float32 inputs for all 13 tasks in
+`figure1_component_contract.csv`, including NMR and ImageNet. Run CPU and CUDA
+within one Chiamaka campaign and CPU and Metal within one Mac campaign so every
+ratio is paired on the same machine. `run_selected_backends.py` checkpoints the
+aggregate CSV after each isolated worker, supports `--resume`, records explicit
+timeouts, and rejects an execution route or precision that differs from the
+request. After both campaigns finish, render the figure without rerunning fits:
+
+```bash
+Rscript benchmark/current_release_evidence/build_figure2_float32.R \
+  /absolute/results/chiamaka/selected_backend_cuda_float32.csv \
+  /absolute/results/mac/selected_backend_metal_float32.csv \
+  /absolute/results/figure2
+```
+
+The renderer creates main-text Figure 2 with CPU/CUDA ratios and Supplementary
+Figure S19 with CPU/Metal ratios. In both figures, runtime is CPU/accelerator,
+whereas memory is accelerator/CPU baseline-corrected host RSS. CUDA
+device-memory peaks remain in the detailed summary table because Metal uses
+unified memory.
 
 `run_figure1_fastpls.py` regenerates the single fastPLS row in the
 independent-implementation figure using ten fresh Linux float32 CPU processes
@@ -118,3 +139,24 @@ The million-sample task uses `run_figure1_imagenet_cpu.sh` with
 scale-infeasible implementations remain `NE`.
 `summarize_figure1_imagenet.py` attaches the GNU-time peak process RSS to each
 completed row before the common table is assembled.
+
+## CUDA software comparison
+
+`run_cuda_ikpls_comparison.py` compares the release fastPLS CUDA workflow with
+IKPLS algorithm 2 through JAX/CUDA. It consumes the same float32 prepared splits
+and SIMPLS component counts as Figure 1. Classification uses fastPLS
+SIMPLS-LDA and the native IKPLS regression-score argmax; regression uses the
+native multivariate response of each implementation. The comparison is an
+end-to-end software comparison, not an estimator-matched comparison.
+
+Both cold and warm fitting-plus-prediction times are retained. Cold times include
+CUDA context or JAX compilation where incurred, host-to-device transfer,
+synchronization, and result transfer. Warm times repeat the public workflow in
+the initialized process. `nvidia-smi` is polled by process to record peak device
+memory, and host RSS is recorded separately. Resource failures are output rows
+rather than omitted cells.
+
+Use `assemble_cuda_ikpls_summary.py` to combine disjoint standard, NMR, and
+ImageNet runs, then create the publication figure with
+`tools/build_supplement_cuda_ikpls_figure.R`. Raw rows and logs remain in the
+local results archive and are not committed to this repository.

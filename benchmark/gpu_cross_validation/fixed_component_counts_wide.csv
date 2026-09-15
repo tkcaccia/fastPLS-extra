@@ -1,0 +1,13 @@
+dataset,evaluated_grid,plssvd,simpls,opls,kernelpls
+metref,"1,2,5,10,20,21,50",k=21;k constrained by response rank,k=50;retained benchmark count,k=50;retained benchmark count,k=50;retained benchmark count
+ccle,"1,2,5,10,17,20,50",k=17;retained benchmark count,k=50;retained benchmark count,k=50;retained benchmark count,k=50;retained benchmark count
+tcga_brca,"1,2,3,5,10",k=3;retained benchmark count,k=3;retained benchmark count,k=3;retained benchmark count,k=3;retained benchmark count
+tcga_hnsc_methylation,"1,2,5,10",k=2;retained benchmark count,k=2;retained benchmark count,k=2;retained benchmark count,k=2;retained benchmark count
+gtex_v8,"1,2,5,10,20,30,50",k=30;k constrained by response rank,k=50;retained benchmark count,k=50;retained benchmark count,k=50;retained benchmark count
+tcga_pan_cancer,"1,2,5,10,20,31,50,100",k=31;k constrained by response rank,k=100;retained benchmark count,k=100;retained benchmark count,k=100;retained benchmark count
+retina,"1,2,5,10,20,50",k=10;retained benchmark count,k=10;retained benchmark count,k=10;retained benchmark count,k=10;retained benchmark count
+tabula,"1,2,5,10,20,31,50",k=31;retained benchmark count,k=31;retained benchmark count,k=31;retained benchmark count,k=31;retained benchmark count
+cifar100,"1,2,5,10,20,50,99",k=99;retained benchmark count,k=99;retained benchmark count,k=99;retained benchmark count,k=99;retained benchmark count
+cbmc_citeseq,"1,2,5,10,20,31,44,50",k=31;retained benchmark count,k=44;retained benchmark count,k=44;retained benchmark count,k=44;retained benchmark count
+prism,"1,2,5,6,10,20,50",k=6;retained benchmark count,k=6;retained benchmark count,k=6;retained benchmark count,k=6;retained benchmark count
+nmr,"1,2,5,10,25,50,75,100,125,150,165,200,250,300",k=100;retained benchmark count,k=50;retained benchmark count,k=50;retained benchmark count,k=50;retained benchmark count

@@ -66,7 +66,10 @@ current <- do.call(rbind, lapply(split(raw, keys), function(x) {
         ncomp = x$ncomp[[1L]],
         repetitions = nrow(x),
         precision = "float32",
-        workstation = "Intel Core i7-13700; 32 GiB RAM",
+        workstation = paste(
+            "Ubuntu 22.04; Intel Core i7-13700; 32 GiB RAM;",
+            "OpenBLAS 0.3.29"
+        ),
         stringsAsFactors = FALSE
     )
 }))
@@ -88,6 +91,9 @@ python_summary_path <- file.path(result_root, "python_pls_panel_summary.csv")
 python_failed_keys <- character()
 if (file.exists(python_summary_path)) {
     python_summary <- read_required(python_summary_path)
+    python_summary <- python_summary[
+        python_summary$implementation == "sklearn_plsregression", , drop = FALSE
+    ]
     write.csv(
         python_summary,
         file.path(tabdir, "python_pls_panel_summary.csv"),
@@ -97,6 +103,10 @@ if (file.exists(python_summary_path)) {
     python_status_path <- file.path(result_root, "python_pls_panel_status.csv")
     if (file.exists(python_status_path)) {
         python_status <- read_required(python_status_path)
+        python_status <- python_status[
+            python_status$implementation == "sklearn_plsregression", ,
+            drop = FALSE
+        ]
         write.csv(
             python_status,
             file.path(tabdir, "python_pls_panel_status.csv"),
@@ -108,10 +118,11 @@ if (file.exists(python_summary_path)) {
         python_summary$task_type == "classification", , drop = FALSE
     ]
     python_names <- c(
-        nirs4all_methods_simpls = "nirs4all-methods / SIMPLS",
-        nirs4all_methods_rsvd = "nirs4all-methods / randomized-SVD PLS",
         sklearn_plsregression = "scikit-learn / PLSRegression"
     )
+    python_summary <- python_summary[
+        python_summary$implementation %in% names(python_names), , drop = FALSE
+    ]
     python_rows <- data.frame(
         dataset = unname(dataset_labels[python_summary$dataset]),
         display = unname(python_names[python_summary$implementation]),
@@ -145,23 +156,27 @@ if (file.exists(python_summary_path)) {
 }
 python_large_path <- file.path(result_root, "python_pls_large_all_runs.csv")
 if (file.exists(python_large_path)) {
+    python_large <- read_required(python_large_path)
+    python_large <- python_large[
+        python_large$implementation == "sklearn_plsregression", , drop = FALSE
+    ]
     write.csv(
-        read_required(python_large_path),
+        python_large,
         file.path(tabdir, "python_pls_large_all_runs.csv"),
         row.names = FALSE,
         na = ""
     )
 }
-comparison$workstation <- "Intel Core i7-13700; 32 GiB RAM"
+comparison$workstation <- paste(
+    "Ubuntu 22.04; Intel Core i7-13700; 32 GiB RAM; OpenBLAS 0.3.29"
+)
 write.csv(comparison,
           file.path(tabdir, "figure1_independent_implementation_data.csv"),
           row.names = FALSE, na = "")
 
 display_order <- c(
     "fastPLS SIMPLS-rSVD / argmax", "fastPLS SIMPLS-rSVD / LDA",
-    "IKPLS", "nirs4all-methods / SIMPLS",
-    "nirs4all-methods / randomized-SVD PLS",
-    "scikit-learn / PLSRegression", "pls / SIMPLS",
+    "IKPLS", "scikit-learn / PLSRegression", "pls / SIMPLS",
     "plsgenomics / PLS-LDA",
     "mdatools / PLS-DA", "plsdepot / SIMPLS", "pcv / SIMPLS",
     "chemometrics / PLS eigen", "mixOmics / PLS-DA", "spls / sPLS-DA"
@@ -218,13 +233,17 @@ figure1 <- (p_accuracy / p_time / p_memory) +
     plot_annotation(
         title = "Single-CPU PLS classification workflows",
         subtitle = paste(
-            "fastPLS rows: SIMPLS-rSVD, centred float32 predictors,",
-            "training-selected components, argmax or LDA;\n",
-            "oversampling 32, five power iterations, seed 123; one CPU thread;",
-            "Intel Core i7-13700 workstation."
+            "fastPLS 0.99.65: Linux, OpenBLAS, one CPU thread, centred",
+            "float32 predictors and ten isolated processes;\n",
+            "training-selected components, oversampling 32, five power",
+            "iterations, seed 123, with argmax or LDA."
         )
     )
 save_plot(figure1, "figure1_independent_implementations", 9.4, 13.6)
+
+if (identical(Sys.getenv("FASTPLS_FIGURE1_ONLY", "0"), "1")) {
+    quit(save = "no", status = 0L)
+}
 
 # Current-release selected-component CPU/accelerator comparisons. Each row was
 # measured in a fresh process; CUDA device memory is sampled by the parent
