@@ -1,0 +1,11 @@
+package,language_function,estimator_task,parameters,prediction_contract
+pls,R; pls::simpls.fit,SIMPLS; classification and regression,"simpls.fit(X, Y, ncomp = A); remaining arguments at defaults",Final coefficient slice with stored predictor and response means; argmax for classification
+plsgenomics,R; pls.lda / pls.regression,PLS-LDA; PLS regression,"Xtest supplied; ncomp = A; nruncv = 0 for pls.lda",Package test predictions; predclass for classification and final multivariate response prediction
+mdatools,R; plsda / pls,PLS-DA; SIMPLS regression,"ncomp = A, center = TRUE, scale = FALSE, cv = NULL where accepted; method = simpls for regression",Held-out class-score or response matrix returned by stats::predict
+plsdepot,R; plsdepot::simpls,SIMPLS; classification and regression,"Training-only removal of non-finite or constant predictors; external centering; comps = A",Prediction reconstructed from returned scores and weights; argmax for classification
+pcv,R; pcv:::simpls,Internal SIMPLS routine; classification and regression,"Externally centred X and Y; ncomp = A",Prediction reconstructed from scores and weights; argmax for classification
+chemometrics,R; chemometrics::pls_eigen,Eigenvalue PLS; classification and regression,"Externally centred X and Y; a = min(A, q, n - 1, p)",Latent-score regression on held-out predictors; argmax for classification
+mixOmics,R; mixOmics::plsda / mixOmics::pls,PLS-DA; PLS regression,"ncomp = A, scale = FALSE; regression mode for continuous responses",Package prediction; max-distance class at component A or final multivariate response prediction
+spls,R; spls::splsda / spls::spls,Sparse PLS-DA; sparse PLS regression,"K = A, eta = 0.9; LDA for splsda; scale.x = FALSE, scale.y = FALSE and simpls fit for regression",Package class prediction or final response matrix
+IKPLS,Python; ikpls.numpy.PLS,Improved-kernel PLS algorithm 2,"External float32 centering; centre and scale disabled internally; no copy; float32; A components",Prediction at A components; argmax for classification
+scikit-learn,Python; sklearn.cross_decomposition.PLSRegression,PLSRegression; classification and regression,"n_components = A, scale = FALSE, max_iter = 500, tol = 1e-6, copy = FALSE; float32 interchange and float64 fitted model",Native held-out prediction; argmax for classification

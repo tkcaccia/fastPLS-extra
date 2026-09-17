@@ -1,0 +1,16 @@
+category,workflow,primary_runner,summary_or_plotter,generated_evidence
+selection,training-only component selection,run_current_component_selection.R,plot_component_selection_current.R,component paths and selected-component manifest
+component_path,real-dataset component paths,run_current_component_path.R,plot_combined_component_paths.R,metric runtime and memory by component
+backend,paired Linux CPU and CUDA,current_release_evidence/run_selected_backends.py,current_release_evidence/build_figure2_float32.R,paired runtime memory metric and prediction agreement
+precision,float32 versus float64,benchmark_float32_backend_agreement.R,summarize_precision_memory_comparison.R,paired precision diagnostics
+external,independent R packages,benchmark_pls_package_comparison.R,plot_pls_package_comparison_current.R,workflow runtime memory and predictive metric
+external,IKPLS comparison,ikpls_cross_language/run_benchmark.py,ikpls_cross_language/summarize_large_float32.py,precision-matched runtime memory and predictions
+validation,SIMPLS-family estimator preservation,benchmark_simpls_estimator_preservation.R,plot_simpls_estimator_preservation.R,coefficient prediction and subspace agreement
+validation,exact-reference SIMPLS,benchmark_simpls_exact_reference.R,,orthogonality deflation and prediction diagnostics
+validation,OPLS and kernel PLS reliability,benchmark_opls_kernel_setting_reliability.R,,setting-level endpoint and component-selection agreement
+validation,rSVD controlled scaling,controlled_scaling/generate_grid.R,controlled_scaling/summarize.R,multi-seed qualification by matrix shape
+ablation,SIMPLS-family execution ablation,benchmark_simpls_multidataset_ablation.R,summarize_simpls_multidataset_ablation.R,runtime and memory contribution by optimization
+cross_validation,ten-fold compiled validation,gpu_cross_validation/run_selected_matrix.R,gpu_cross_validation/plot_selected_matrix.R,fit-predict versus cross-validation runtime and memory
+nmr,NMR fixed-split evaluation,benchmark_nmr_qualified_solver.R,summarize_nmr_qualified_solver.R,RMSD Q2 runtime memory and spectrum predictions
+imagenet,ImageNet foundation-model representations,benchmark_imagenet_current_fused_lda.R,plot_imagenet_current.R,top-1 top-5 runtime and memory component paths
+formal,algebraic invariants,../formal/lean,../formal/lean/lakefile.toml,machine-checked proof targets

@@ -1,0 +1,14 @@
+publication,item,analysis_source,output_class,status
+CMPB,Table 1 and dataset preparation,benchmark/acquire_publication_datasets.R,dataset manifest,current
+CMPB,Figure 1 independent implementations,benchmark/current_release_evidence; benchmark/ikpls_cross_language; tools/build_figure1_six_panel.R,figure and source table,current
+CMPB,Figure 2 CPU CUDA,benchmark/current_release_evidence/run_selected_backends.py; benchmark/current_release_evidence/build_figure2_float32.R,figure and source table,current
+CMPB,Figure 2 cross-validation,benchmark/gpu_cross_validation; benchmark/current_release_evidence/build_figure2_with_cv.R,figure and source table,current
+CMPB,Figure 3 NMR,benchmark/benchmark_nmr_component_selection.R; benchmark/benchmark_nmr_qualified_solver.R; benchmark/benchmark_nmr_deposited_reference.R; tools/build_nmr_figure3_family_components.R,figure and source table,current
+CMPB,Figure 4 ImageNet,benchmark/benchmark_imagenet_current_fused_lda.R; benchmark/plot_imagenet_current.R,figure and source table,current
+CMPB supplement,Numerical validation,benchmark/benchmark_simpls_exact_reference.R; benchmark/benchmark_simpls_estimator_preservation.R; benchmark/controlled_scaling,numerical audit,current
+CMPB supplement,SIMPLS execution ablation,benchmark/benchmark_simpls_multidataset_ablation.R; benchmark/summarize_simpls_multidataset_ablation.R,table,current
+CMPB supplement,OPLS and kernel PLS validation,benchmark/benchmark_opls_kernel_estimator_validation.R; benchmark/benchmark_opls_kernel_setting_reliability.R; benchmark/benchmark_kernel_sensitivity.R,table,current
+CMPB supplement,Component paths,benchmark/run_current_component_selection.R; benchmark/run_current_component_path.R; benchmark/supplement_component_paths,figures and tables,current
+CMPB supplement,Precision and backend agreement,benchmark/benchmark_float32_backend_agreement.R; benchmark/summarize_precision_memory_comparison.R,table and figure,current
+CMPB supplement,Figure S14 localized NMR error,benchmark/analyze_nmr_localized_error.R,figure and source tables,current
+CMPB supplement,Formal invariants,formal/lean,machine-checked proof,current

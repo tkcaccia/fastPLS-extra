@@ -1,0 +1,11 @@
+publication,item,analysis_source,output_class,status
+JSS,Shared core architecture,benchmark/mit_core_migration; tools/test_resident_api.cpp; tools/validate_native_core.py,software validation,planned
+JSS,Cross-language parity,tools/update_cross_language_manuscript.py; tools/test_resident_public.R,numerical agreement,planned
+JSS,Numerical precision,benchmark/precision_selected,figure and table,planned
+JSS,CPU thread scaling,benchmark/multicore_scaling; benchmark/multicore_selected,figure and table,planned
+JSS,Metal execution,benchmark/metal_validation; benchmark/metal_operation_split,figure and table,planned
+JSS,Native accelerator routes,benchmark/native_gpu_special,software validation,planned
+JSS,Compiled cross-validation,benchmark/cross_validation_hoisting; benchmark/benchmark_cv_compiled_vs_r_loop.R,ablation and timing,planned
+JSS,Response Gram kernels,benchmark/response_gram,kernel benchmark,planned
+JSS,LDA implementation,benchmark/lda_cpu; benchmark/benchmark_lda_backend_agreement.R,numerical and timing audit,planned
+JSS,NMR software case study,Phase1 fixed task definition with Phase2 interface runners,case study,planned
