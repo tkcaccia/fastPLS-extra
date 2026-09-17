@@ -39,20 +39,18 @@ benchmark workflows.
 
 ## Machine-checked algebraic invariants
 
-The Lean 4 project in `formal/lean/` checks the exact-real-arithmetic
+The Lean 4 project in `Phase1/formal/lean/` checks the exact-real-arithmetic
 identities reported in the CMPB supplementary material. The project includes a
-pinned Lean toolchain and resolved Mathlib manifest. From the repository root,
-run:
+pinned Lean toolchain, resolved Mathlib manifest and theorem-by-theorem audit.
+From the repository root, run:
 
 ```sh
-cd formal/lean
-lake exe cache get
-lake build
+cd Phase1/formal/lean
+./check.sh
 ```
 
-The cache step is optional but substantially reduces build time. Do not run
-`lake update` when reproducing the reported proof build because that command can
-change the resolved dependency revisions. These proofs establish the stated
+The audit reports the pinned Lean version and theorem count, rejects incomplete
+proof placeholders and runs `lake build`. These proofs establish the stated
 algebraic identities; they do not verify floating-point error, randomized-SVD
 accuracy, or equivalence between the Lean specification and compiled code.
 

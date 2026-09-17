@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "formal/lean/**"
+      - "Phase1/formal/lean/**"
       - ".github/workflows/lean-formal.yml"
   pull_request:
     paths:
-      - "formal/lean/**"
+      - "Phase1/formal/lean/**"
       - ".github/workflows/lean-formal.yml"
   workflow_dispatch:
 
@@ -20,19 +20,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Build pinned Lean project
+      - name: Prepare pinned Lean project
         uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9
         with:
-          lake-package-directory: formal/lean
+          lake-package-directory: Phase1/formal/lean
           auto-config: false
-          build: true
+          build: false
           test: false
           lint: false
           use-mathlib-cache: true
-      - name: Reject incomplete proof placeholders
-        working-directory: formal/lean
-        run: |
-          if grep -n -E '(^|[^[:alnum:]_])(sorry|admit)([^[:alnum:]_]|$)' \
-              FastPLSFormal.lean FastPLSFormal/*.lean; then
-            exit 1
-          fi
+      - name: Audit algebraic invariants
+        working-directory: Phase1/formal/lean
+        run: ./check.sh
