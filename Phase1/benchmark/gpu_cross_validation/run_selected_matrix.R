@@ -46,19 +46,47 @@ backends <- strsplit(args$backends, ",", fixed = TRUE)[[1L]]
 repetitions <- as.integer(args$repetitions %||% "5")
 kfold <- as.integer(args$kfold %||% "10")
 seed <- as.integer(args$seed %||% "123")
+timeout_sec <- as.integer(args$timeout_sec %||% "1800")
 precision <- args$precision %||% "float32"
 context_mode <- args$context_mode %||% "cold"
+if (is.na(timeout_sec) || timeout_sec < 1L) {
+    stop("--timeout-sec must be a positive integer")
+}
 excluded_datasets <- strsplit(
     args$exclude_datasets %||% "", ",", fixed = TRUE
 )[[1L]]
 excluded_datasets <- excluded_datasets[nzchar(excluded_datasets)]
+included_datasets <- strsplit(
+    args$datasets %||% "", ",", fixed = TRUE
+)[[1L]]
+included_datasets <- included_datasets[nzchar(included_datasets)]
+included_methods <- strsplit(
+    args$methods %||% "plssvd,simpls,opls,kernelpls", ",", fixed = TRUE
+)[[1L]]
+included_workloads <- strsplit(
+    args$workloads %||% "fit_predict,cv", ",", fixed = TRUE
+)[[1L]]
+if (!length(included_methods) ||
+        !all(included_methods %in% c("plssvd", "simpls", "opls", "kernelpls"))) {
+    stop("--methods contains an unsupported PLS family")
+}
+if (!length(included_workloads) ||
+        !all(included_workloads %in% c("fit_predict", "cv"))) {
+    stop("--workloads must contain fit_predict, cv, or both")
+}
 
 selection <- selection[
     selection$status == "success" &
-        selection$family %in% c("plssvd", "simpls", "opls", "kernelpls") &
+        selection$family %in% included_methods &
         !selection$dataset %in% excluded_datasets,
     , drop = FALSE
 ]
+if (length(included_datasets)) {
+    selection <- selection[
+        selection$dataset %in% included_datasets,
+        , drop = FALSE
+    ]
+}
 large_last <- c("nmr", "imagenet")
 dataset_order <- c(
     sort(setdiff(unique(selection$dataset), large_last)),
@@ -94,7 +122,7 @@ manifest <- do.call(rbind, lapply(seq_len(nrow(selection)), function(index) {
         method = row$family,
         ncomp = as.integer(row$selected_ncomp),
         backend = backends,
-        workload = c("fit_predict", "cv"),
+        workload = included_workloads,
         replicate = seq_len(repetitions),
         classifier = classifier,
         selection_metric = selection_metric,
@@ -135,9 +163,66 @@ for (index in seq_len(nrow(manifest))) {
         paste0("--n.cores=", row$n.cores),
         paste0("--source-id=", args$source_id %||% "selected-release-matrix")
     )
-    status <- system2(file.path(R.home("bin"), "Rscript"), command,
-        stdout = log, stderr = log)
+    started <- proc.time()[["elapsed"]]
+    status <- suppressWarnings(system2(
+        file.path(R.home("bin"), "Rscript"), command,
+        stdout = log, stderr = log, timeout = timeout_sec
+    ))
+    elapsed <- proc.time()[["elapsed"]] - started
     if (status != 0L) {
         message("Worker failed: ", paste(command, collapse = " "))
+        failure_status <- if (identical(as.integer(status), 124L)) {
+            "timeout"
+        } else {
+            "error"
+        }
+        failure <- data.frame(
+            package_version = as.character(utils::packageVersion("fastPLS")),
+            package_path = normalizePath(args$library, mustWork = TRUE),
+            source_id = args$source_id %||% "selected-release-matrix",
+            dataset = row$dataset,
+            task = basename(row$task),
+            workload = row$workload,
+            backend = row$backend,
+            precision = row$precision,
+            method = row$method,
+            classifier = if (identical(row$task_type, "classification")) {
+                row$classifier
+            } else {
+                NA_character_
+            },
+            kernel = if (identical(row$method, "kernelpls")) {
+                "linear"
+            } else {
+                NA_character_
+            },
+            north = if (identical(row$method, "opls")) 1L else NA_integer_,
+            n = NA_integer_,
+            test_n = NA_integer_,
+            p = NA_integer_,
+            q = NA_integer_,
+            folds = row$kfold,
+            requested_ncomp = as.character(row$ncomp),
+            best_ncomp = NA_integer_,
+            selection = row$selection_metric,
+            metric_name = row$selection_metric,
+            metric_value = NA_real_,
+            elapsed_sec = elapsed,
+            baseline_rss_mib = NA_real_,
+            final_rss_mib = NA_real_,
+            output_mib = NA_real_,
+            fold_signature = NA_character_,
+            prediction_signature = NA_character_,
+            execution_route = NA_character_,
+            seed = row$seed,
+            n.cores = row$n.cores,
+            replicate = row$replicate,
+            status = failure_status,
+            error_message = sprintf(
+                "worker exit status %d after %.3f seconds", status, elapsed
+            ),
+            stringsAsFactors = FALSE
+        )
+        write.csv(failure, output, row.names = FALSE)
     }
 }
