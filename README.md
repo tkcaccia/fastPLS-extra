@@ -29,10 +29,19 @@ the corresponding phase directory so that paths such as `benchmark/...`,
 
 This repository is not an installable package and does not implement the
 public fastPLS API. The modelling implementation belongs to the MIT-licensed
-`fastPLS` repository. Generated data, benchmark results, figures, rendered
-documents, package libraries, and check outputs are intentionally excluded
-from this Git repository. They remain in an external results root until a
-frozen evidence release is deposited.
+[`fastPLS`](https://github.com/tkcaccia/fastPLS) repository. Generated data,
+benchmark results, figures, rendered documents, package libraries, and check
+outputs are intentionally excluded from this Git repository. They remain in an
+external results root until a frozen evidence release is deposited.
+
+## Related repositories
+
+- [`fastPLS`](https://github.com/tkcaccia/fastPLS): R package and canonical
+  MIT-licensed C++ core.
+- [`fastPLS-py`](https://github.com/tkcaccia/fastPLS-py): Python interface to
+  the shared core.
+- [`fastPLS-matlab`](https://github.com/tkcaccia/fastPLS-matlab): MATLAB
+  interface to the shared core.
 
 Copy [`config/benchmark.env.example`](config/benchmark.env.example) to the
 ignored `config/benchmark.env`, edit the absolute paths, and load it before
