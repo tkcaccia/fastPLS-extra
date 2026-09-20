@@ -103,8 +103,12 @@ status_label <- function(data, value) {
             grepl("timeout", data$status, ignore.case = TRUE),
             "Timeout",
             ifelse(
-                grepl("fail|error", data$status, ignore.case = TRUE),
-                "Failed", "NE"
+                grepl("memory|resource", data$status, ignore.case = TRUE),
+                "Memory",
+                ifelse(
+                    grepl("fail|error", data$status, ignore.case = TRUE),
+                    "Failed", "NE"
+                )
             )
         )
     )

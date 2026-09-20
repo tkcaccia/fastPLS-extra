@@ -7,6 +7,20 @@ import math
 from pathlib import Path
 import statistics
 
+METHOD_PACKAGES = {
+    "pls_simpls_fit": "pls",
+    "plsgenomics_pls_lda": "plsgenomics",
+    "plsgenomics_pls_regression": "plsgenomics",
+    "mdatools_plsda_or_pls": "mdatools",
+    "plsdepot_simpls": "plsdepot",
+    "pcv_simpls": "pcv",
+    "chemometrics_pls_eigen": "chemometrics",
+    "mixOmics_plsda": "mixOmics",
+    "mixOmics_pls": "mixOmics",
+    "spls_splsda": "spls",
+    "spls_spls": "spls",
+}
+
 
 def number(value):
     try:
@@ -30,6 +44,23 @@ def median_first(rows, keys, scale=1.0):
     return ""
 
 
+def truthy(value):
+    return str(value).strip().lower() in {"true", "t", "1", "yes"}
+
+
+def terminal_status(rows, completed):
+    if completed:
+        return "success"
+    if any(truthy(row.get("monitor_timed_out")) for row in rows):
+        return "timeout"
+    attempted = [
+        row for row in rows
+        if row.get("status") != "not_repeated_after_first_failure"
+    ]
+    statuses = sorted({row.get("status", "") for row in attempted})
+    return ";".join(statuses)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("raw", type=Path)
@@ -49,7 +80,7 @@ def main():
     output = []
     for key, rows in sorted(groups.items()):
         completed = [row for row in rows if row.get("status") in {"ok", "success"}]
-        statuses = sorted({row.get("status", "") for row in rows})
+        exemplar = completed[0] if completed else rows[0]
         messages = sorted({
             row.get("error_message", "") for row in rows
             if row.get("error_message", "")
@@ -59,10 +90,16 @@ def main():
             "task_type": key[1],
             "method_id": key[2],
             "ncomp": key[3],
-            "package": completed[0].get("package", "") if completed else "",
-            "package_version": completed[0].get("package_version", "") if completed else "",
-            "execution_precision": completed[0].get("execution_precision", "") if completed else "",
+            "package": (
+                exemplar.get("package", "") or METHOD_PACKAGES.get(key[2], "")
+            ),
+            "package_version": exemplar.get("package_version", ""),
+            "execution_precision": exemplar.get("execution_precision", ""),
             "repetitions_requested": len(rows),
+            "repetitions_attempted": sum(
+                row.get("status") != "not_repeated_after_first_failure"
+                for row in rows
+            ),
             "repetitions_completed": len(completed),
             "accuracy": median(completed, "accuracy"),
             "balanced_accuracy": median(completed, "balanced_accuracy"),
@@ -73,7 +110,7 @@ def main():
             "median_peak_rss_mib": median_first(
                 completed, ("peak_rss_mib", "peak_host_rss_mb")
             ),
-            "status": "success" if completed else ";".join(statuses),
+            "status": terminal_status(rows, completed),
             "error": " | ".join(messages),
         })
 

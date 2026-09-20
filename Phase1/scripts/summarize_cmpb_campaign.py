@@ -134,18 +134,35 @@ def cv_comparison(*directories: Path) -> list[dict]:
         dataset = row.get("dataset", "").lower()
         if dataset.startswith("imagenet"):
             row["dataset"] = "imagenet"
+        classifier = row.get("classifier", "").strip().lower()
+        if classifier in {"", "na", "nan", "none"}:
+            row["classifier"] = "regression"
         key = tuple(row.get(field, "") for field in fields)
         groups.setdefault(key, []).append(row)
     summary = {}
     for key, rows in groups.items():
         success = [
             row for row in rows
-            if row.get("status") not in {"error", "failed", "timeout"}
+            if row.get("status") == "success"
             and number(row.get("elapsed_sec")) is not None
         ]
+        observed_failures = sorted({
+            row.get("status", "error")
+            for row in rows
+            if row not in success
+        })
+        if len(success) == len(rows):
+            status = "success"
+        elif success:
+            status = "partial"
+        elif observed_failures and set(observed_failures) == {"timeout"}:
+            status = "timeout"
+        else:
+            status = "error"
         summary[key] = {
             "median_sec": median(success, "elapsed_sec"),
-            "status": "success" if success else "error",
+            "status": status,
+            "failure_statuses": ";".join(observed_failures),
             "attempted": len(rows),
             "completed": len(success),
             "ncomp": (success or rows)[0].get("requested_ncomp", "") if rows else "",
@@ -172,6 +189,10 @@ def cv_comparison(*directories: Path) -> list[dict]:
             ),
             "status_fit_predict": fit["status"] if fit else "not_evaluated",
             "status_cv": cv["status"] if cv else "not_evaluated",
+            "failure_statuses_fit_predict": (
+                fit["failure_statuses"] if fit else ""
+            ),
+            "failure_statuses_cv": cv["failure_statuses"] if cv else "",
             "attempted_fit_predict": fit["attempted"] if fit else 0,
             "completed_fit_predict": fit["completed"] if fit else 0,
             "attempted_cv": cv["attempted"] if cv else 0,

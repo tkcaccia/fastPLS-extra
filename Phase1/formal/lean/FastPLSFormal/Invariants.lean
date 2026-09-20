@@ -9,7 +9,7 @@ import Mathlib.Tactic.Ring
 # Algebraic invariants used by fastPLS
 
 These theorems formalize exact-real-arithmetic identities used by the optimized
-PLS-SVD, SIMPLS-family, OPLS, kernel-PLS, and cross-validation implementations.
+PLS-SVD, SIMPLS-family, OPLS, kernel PLS, and cross-validation implementations.
 They do not verify floating-point rounding, randomized-SVD approximation error,
 or correspondence between this specification and compiled CPU/GPU code.
 -/

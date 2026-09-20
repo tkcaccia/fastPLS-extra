@@ -37,7 +37,7 @@ dataset_labels <- c(
 )
 family_order <- c("plssvd", "simpls", "opls", "kernelpls")
 family_labels <- c(
-    plssvd = "PLS-SVD", simpls = "SIMPLS family", opls = "OPLS",
+    plssvd = "PLS-SVD", simpls = "SIMPLS-family", opls = "OPLS",
     kernelpls = "linear kernel PLS"
 )
 
@@ -122,26 +122,31 @@ cv_panel <- function(data, backend, title, show_y = TRUE) {
         log2(data$value),
         NA_real_
     )
+    partial <- !is.na(data$status_cv) & data$status_cv == "partial"
+    timed_out <- !is.na(data$status_cv) & data$status_cv == "timeout"
     failed <- !is.na(data$status_cv) & data$status_cv == "error"
     data$label <- ifelse(
         is.finite(data$value) & data$value > 0,
-        sprintf("%.2fx", data$value),
-        ifelse(failed, "ERR", "NE")
+        paste0(sprintf("%.2fx", data$value), ifelse(partial, "*", "")),
+        ifelse(timed_out, "TO", ifelse(failed, "ERR", "NE"))
     )
     ggplot(data, aes(family_label, dataset_label, fill = fill_value)) +
         geom_tile(colour = "white", linewidth = 0.45) +
         geom_text(aes(label = label), size = 1.85) +
         scale_fill_gradient2(
             low = "#2166ac", mid = "#f7f7f7", high = "#b2182b",
-            midpoint = log2(10), limits = log2(c(1, 100)),
+            midpoint = log2(10), limits = log2(c(0.25, 100)),
             oob = scales::squish, na.value = "#d9d9d9",
-            breaks = log2(c(1, 2, 5, 10, 20, 50, 100)),
-            labels = c("1x", "2x", "5x", "10x", "20x", "50x", "100x"),
+            breaks = log2(c(0.25, 0.5, 1, 2, 5, 10, 20, 50, 100)),
+            labels = c(
+                "0.25x", "0.5x", "1x", "2x", "5x", "10x", "20x",
+                "50x", "100x"
+            ),
             name = "CV / fit + prediction"
         ) +
         labs(
             title = title,
-            subtitle = "Ten-fold CV / one score-matched fit plus prediction",
+            subtitle = "10-fold CV / one full-training fit + test prediction",
             x = NULL,
             y = NULL
         ) +
@@ -181,9 +186,10 @@ panels <- list(
 figure <- wrap_plots(panels, ncol = 2, guides = "keep") +
     plot_annotation(
         title = "Float32 CPU and CUDA execution across PLS workflows",
-        subtitle = paste(
-            "Matched Intel Core i7-13700 and NVIDIA RTX 5060 Ti runs;",
-            "panels A-B use argmax; panels C-D retain LDA scores"
+        subtitle = paste0(
+            "Matched Intel Core i7-13700 and NVIDIA RTX 5060 Ti runs\n",
+            "Panels A-B use argmax; panels C-D retain LDA scores; ",
+            "* denotes incomplete repetitions"
         ),
         theme = theme(
             plot.title = element_text(face = "bold", size = 13),

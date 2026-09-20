@@ -5,7 +5,15 @@
 # ratios are never formed across computers.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 4L) {
+scope <- tolower(Sys.getenv("FASTPLS_COMPONENT_PATH_SCOPE", "all"))
+if (scope == "cmpb" && length(args) != 3L) {
+    stop(
+        "Usage for CMPB scope: summarize_current_component_paths.R ",
+        "LINUX_RAW COMPONENT_SELECTION OUTPUT_DIR",
+        call. = FALSE
+    )
+}
+if (scope != "cmpb" && length(args) != 4L) {
     stop(
         "Usage: summarize_current_component_paths.R ",
         "CUDA_RAW METAL_RAW COMPONENT_SELECTION OUTPUT_DIR",
@@ -25,9 +33,15 @@ suppressPackageStartupMessages({
 })
 
 cuda_file <- normalizePath(args[[1L]], mustWork = TRUE)
-metal_file <- normalizePath(args[[2L]], mustWork = TRUE)
-selection_file <- normalizePath(args[[3L]], mustWork = TRUE)
-output_dir <- normalizePath(args[[4L]], mustWork = FALSE)
+if (scope == "cmpb") {
+    metal_file <- NULL
+    selection_file <- normalizePath(args[[2L]], mustWork = TRUE)
+    output_dir <- normalizePath(args[[3L]], mustWork = FALSE)
+} else {
+    metal_file <- normalizePath(args[[2L]], mustWork = TRUE)
+    selection_file <- normalizePath(args[[3L]], mustWork = TRUE)
+    output_dir <- normalizePath(args[[4L]], mustWork = FALSE)
+}
 plot_dir <- file.path(output_dir, "component_path_plots")
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -37,14 +51,37 @@ read_panel <- function(path, platform_name) {
     value
 }
 
-raw <- rbindlist(
-    list(read_panel(cuda_file, "CUDA workstation"),
-         read_panel(metal_file, "Metal workstation")),
-    use.names = TRUE,
-    fill = TRUE
-)
+panels <- list(read_panel(cuda_file, "CUDA workstation"))
+if (!is.null(metal_file)) {
+    panels[[2L]] <- read_panel(metal_file, "Metal workstation")
+}
+raw <- rbindlist(panels, use.names = TRUE, fill = TRUE)
 raw <- raw[status == "success"]
-scope <- tolower(Sys.getenv("FASTPLS_COMPONENT_PATH_SCOPE", "all"))
+
+# Component-path runners written at different stages used either `_mb` or
+# `_mib` for the same binary-memory measurements. Normalize the two schemas
+# before summarizing so current evidence is not coupled to a column spelling.
+if (!"peak_rss_mb" %in% names(raw) && "peak_rss_mib" %in% names(raw)) {
+    raw[, peak_rss_mb := peak_rss_mib]
+}
+if (!"incremental_peak_rss_mb" %in% names(raw) &&
+        "incremental_peak_rss_mib" %in% names(raw)) {
+    raw[, incremental_peak_rss_mb := incremental_peak_rss_mib]
+}
+required_memory <- c("peak_rss_mb", "incremental_peak_rss_mb")
+missing_memory <- setdiff(required_memory, names(raw))
+if (length(missing_memory)) {
+    stop(
+        "Component-path input is missing memory column(s): ",
+        paste(missing_memory, collapse = ", "),
+        call. = FALSE
+    )
+}
+if (!"metric_name" %in% names(raw)) {
+    raw[, metric_name := fifelse(
+        task_type == "classification", "accuracy", "rmsd"
+    )]
+}
 if (scope == "cmpb") {
     raw <- raw[platform == "CUDA workstation"]
 } else if (scope != "all") {
@@ -160,7 +197,7 @@ dataset_labels <- c(
     tcga_pan_cancer = "TCGA Pan-Cancer"
 )
 family_labels <- c(
-    plssvd = "PLS-SVD", simpls = "SIMPLS", opls = "OPLS",
+    plssvd = "PLS-SVD", simpls = "SIMPLS-family", opls = "OPLS",
     kernelpls = "kernel PLS"
 )
 architecture_colours <- c(

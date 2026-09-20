@@ -10,7 +10,6 @@ PHASE1_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${PHASE1_ROOT}"
 : "${PACKAGE_ARCHIVE:?Set PACKAGE_ARCHIVE to the frozen fastPLS source archive}"
 : "${CAMPAIGN_ROOT:?Set CAMPAIGN_ROOT outside every Git checkout}"
-: "${SEED_TASK_ROOT:?Set SEED_TASK_ROOT to the fixed ordinary task objects}"
 : "${NMR_INPUT:?Set NMR_INPUT to the prepared NMR RData file}"
 : "${IMAGENET_TASK_RDS:?Set IMAGENET_TASK_RDS to the ImageNet task descriptor}"
 
@@ -22,8 +21,15 @@ SOURCE_ID="${SOURCE_ID:-unrecorded}"
 BENCHMARK_HOST_ID="${BENCHMARK_HOST_ID:-}"
 PACKAGE_LIB="${CAMPAIGN_ROOT}/library"
 TASK_ROOT="${CAMPAIGN_ROOT}/inputs/tasks"
-PYTHON_SITE="${CAMPAIGN_ROOT}/python/site-packages"
-OPENBLAS_ROOT="${CAMPAIGN_ROOT}/dependencies/openblas"
+PYTHON_SITE="${PYTHON_SITE:-${CAMPAIGN_ROOT}/python/site-packages}"
+REUSE_PYTHON_SITE="${REUSE_PYTHON_SITE:-0}"
+OPENBLAS_ROOT="${OPENBLAS_ROOT:-${CAMPAIGN_ROOT}/dependencies/openblas}"
+EXPECTED_OPENBLAS_VERSION="${EXPECTED_OPENBLAS_VERSION:-0.3.29}"
+EXPECTED_OPENBLAS_CORE="${EXPECTED_OPENBLAS_CORE:-Haswell}"
+OPENBLAS_TARGET="${OPENBLAS_TARGET:-HASWELL}"
+LEAN_ELAN_HOME="${LEAN_ELAN_HOME:-${CAMPAIGN_ROOT}/dependencies/elan}"
+CAMPAIGN_SCOPE="${CAMPAIGN_SCOPE:-full}"
+FIGURE1_EVIDENCE_ROOT="${FIGURE1_EVIDENCE_ROOT:-}"
 RESULTS_ROOT="${CAMPAIGN_ROOT}/results"
 LOG_ROOT="${CAMPAIGN_ROOT}/logs"
 STATUS_FILE="${CAMPAIGN_ROOT}/stage_status.tsv"
@@ -89,55 +95,101 @@ install_package() {
 .libPaths(c(Sys.getenv("FASTPLS_BENCH_LIB"), .libPaths()))
 library(fastPLS)
 stopifnot(as.character(packageVersion("fastPLS")) == Sys.getenv("EXPECTED_VERSION"))
-stopifnot(identical(fastPLS_blas(), "OpenBLAS"))
+stopifnot(identical(fastPLS_blas(details = FALSE), "OpenBLAS"))
 cat(normalizePath(find.package("fastPLS")), "\n")
-cat("BLAS:", fastPLS_blas(), "\n")
+print(fastPLS_blas())
 '
 }
 
 prepare_dependencies() {
-    local deb_dir="${CAMPAIGN_ROOT}/dependencies/openblas_debs"
-    local extract_root="${CAMPAIGN_ROOT}/dependencies/openblas_root"
-    mkdir -p "${deb_dir}" "${extract_root}" \
-        "${OPENBLAS_ROOT}/include" "${OPENBLAS_ROOT}/lib"
+    local source_root="${CAMPAIGN_ROOT}/dependencies/OpenBLAS-${EXPECTED_OPENBLAS_VERSION}"
+    mkdir -p "${CAMPAIGN_ROOT}/dependencies"
     if [ ! -e "${OPENBLAS_ROOT}/lib/libopenblas.so" ]; then
-        (
-            cd "${deb_dir}" || exit 1
-            apt-get download \
-                libopenblas-dev libopenblas-pthread-dev libopenblas0-pthread
-            for package in ./*.deb; do
-                dpkg-deb -x "${package}" "${extract_root}"
-            done
-        )
-        cp -a \
-            "${extract_root}/usr/include/x86_64-linux-gnu/openblas-pthread/." \
-            "${OPENBLAS_ROOT}/include/"
-        cp -a \
-            "${extract_root}/usr/lib/x86_64-linux-gnu/openblas-pthread/." \
-            "${OPENBLAS_ROOT}/lib/"
+        rm -rf "${source_root}"
+        git clone --depth 1 --branch "v${EXPECTED_OPENBLAS_VERSION}" \
+            https://github.com/OpenMathLib/OpenBLAS.git "${source_root}" || \
+            return $?
+        make -C "${source_root}" -j8 \
+            DYNAMIC_ARCH=0 TARGET="${OPENBLAS_TARGET}" USE_OPENMP=0 \
+            NUM_THREADS=64 NO_AFFINITY=1 BINARY=64 INTERFACE64=0 || \
+            return $?
+        make -C "${source_root}" \
+            DYNAMIC_ARCH=0 TARGET="${OPENBLAS_TARGET}" USE_OPENMP=0 \
+            NUM_THREADS=64 NO_AFFINITY=1 BINARY=64 INTERFACE64=0 \
+            PREFIX="${OPENBLAS_ROOT}" install || return $?
     fi
     test -e "${OPENBLAS_ROOT}/include/openblas_config.h"
     test -e "${OPENBLAS_ROOT}/lib/libopenblas.so"
+    FASTPLS_BENCH_BLAS_DESCRIPTION="$(
+        python3 "${PHASE1_ROOT}/config/inspect_openblas.py" \
+            --library "${OPENBLAS_ROOT}/lib/libopenblas.so" \
+            --require-version "${EXPECTED_OPENBLAS_VERSION}" \
+            --require-core "${EXPECTED_OPENBLAS_CORE}"
+    )" || return 2
+    export FASTPLS_BENCH_BLAS_DESCRIPTION
+    printf '%s\n' "${FASTPLS_BENCH_BLAS_DESCRIPTION}" \
+        >"${CAMPAIGN_ROOT}/openblas_configuration.txt"
 FASTPLS_BENCH_LIB="${PACKAGE_LIB}" Rscript --vanilla -e '
 .libPaths(c(Sys.getenv("FASTPLS_BENCH_LIB"), .libPaths()))
-required <- c("float", "testthat", "knitr", "rmarkdown")
-missing <- required[!vapply(required, requireNamespace, logical(1L), quietly = TRUE)]
-if (length(missing)) {
+cran_required <- c(
+    "data.table", "float", "testthat", "knitr", "rmarkdown", "pls",
+    "plsgenomics", "mdatools", "plsdepot", "pcv", "chemometrics", "spls",
+    "BiocManager"
+)
+missing_cran <- cran_required[
+    !vapply(cran_required, requireNamespace, logical(1L), quietly = TRUE)
+]
+if (length(missing_cran)) {
     install.packages(
-        missing,
+        missing_cran,
         lib = Sys.getenv("FASTPLS_BENCH_LIB"),
         repos = "https://cloud.r-project.org",
         type = "source"
     )
 }
-stopifnot(all(vapply(required, requireNamespace, logical(1L), quietly = TRUE)))
+stopifnot(all(vapply(
+    cran_required, requireNamespace, logical(1L), quietly = TRUE
+)))
+if (!requireNamespace("mixOmics", quietly = TRUE)) {
+    BiocManager::install(
+        "mixOmics",
+        lib = Sys.getenv("FASTPLS_BENCH_LIB"),
+        ask = FALSE,
+        update = FALSE,
+        type = "source"
+    )
+}
+stopifnot(requireNamespace("mixOmics", quietly = TRUE))
 cat(as.character(packageVersion("float")), "\n")
 '
 }
 
+prepare_lean() {
+    local elan_home="${LEAN_ELAN_HOME}"
+    local installer="${CAMPAIGN_ROOT}/dependencies/elan-init.sh"
+    if [ ! -x "${elan_home}/bin/elan" ]; then
+        curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o "${installer}" || return $?
+        ELAN_HOME="${elan_home}" sh "${installer}" \
+            -y --no-modify-path --default-toolchain none || return $?
+    fi
+    export ELAN_HOME="${elan_home}"
+    export PATH="${ELAN_HOME}/bin:${PATH}"
+    (
+        cd "${PHASE1_ROOT}/formal/lean" || exit 1
+        lake exe cache get
+    ) || return $?
+    elan --version >"${CAMPAIGN_ROOT}/lean_environment.txt"
+    (
+        cd "${PHASE1_ROOT}/formal/lean" || exit 1
+        lean --version
+    ) >>"${CAMPAIGN_ROOT}/lean_environment.txt"
+}
+
 run_package_tests() {
     local check_root="${CAMPAIGN_ROOT}/package_check"
-    local source_root package_dir started finished status
+    local source_root package_dir started finished status check_log
     mkdir -p "${check_root}"
     source_root="${check_root}/source"
     mkdir -p "${source_root}"
@@ -165,37 +217,70 @@ run_package_tests() {
             FASTPLS_USE_OPENBLAS=1 OPENBLAS_ROOT="${OPENBLAS_ROOT}" \
             R_LIBS_USER="${R_LIBS_USER}" \
             R CMD check --no-manual "${PACKAGE_ARCHIVE}"
-    )
+    ) || return $?
+    check_log="${check_root}/fastPLS.Rcheck/00check.log"
+    if [ ! -f "${check_log}" ] || \
+       ! grep -qx 'Status: OK' "${check_log}"; then
+        echo "R CMD check did not report Status: OK." >&2
+        return 2
+    fi
 }
 
 prepare_tasks() {
     FASTPLS_DATA_ROOT="$(dirname "${NMR_INPUT}")" \
-    FASTPLS_SEED_TASK_ROOT="${SEED_TASK_ROOT}" \
     FASTPLS_IMAGENET_TASK_RDS="${IMAGENET_TASK_RDS}" \
     Rscript --vanilla \
         "${PHASE1_ROOT}/benchmark/current_release_evidence/prepare_figure1_tasks.R" \
-        "${CONTRACT}" "${TASK_ROOT}"
+        "${CONTRACT}" "${TASK_ROOT}" || return $?
+    cp "${IMAGENET_TASK_RDS}" "${TASK_ROOT}/imagenet_task.rds"
+    Rscript --vanilla \
+        "${PHASE1_ROOT}/scripts/write_prepared_task_manifest.R" \
+        "${TASK_ROOT}"
 }
 
 prepare_python() {
-    mkdir -p "${PYTHON_SITE}"
-    python3 -m pip install --upgrade --target "${PYTHON_SITE}" -r \
-        "${PHASE1_ROOT}/benchmark/ikpls_cross_language/requirements.txt" || \
-        return $?
-    python3 -m pip install --upgrade --target "${PYTHON_SITE}" -r \
-        "${PHASE1_ROOT}/benchmark/ikpls_cross_language/requirements-cuda.txt" || \
-        return $?
+    if [ "${REUSE_PYTHON_SITE}" != "1" ]; then
+        mkdir -p "${PYTHON_SITE}"
+        python3 -m pip install --upgrade --target "${PYTHON_SITE}" -r \
+            "${PHASE1_ROOT}/benchmark/ikpls_cross_language/requirements.txt" || \
+            return $?
+        python3 -m pip install --upgrade --target "${PYTHON_SITE}" -r \
+            "${PHASE1_ROOT}/benchmark/ikpls_cross_language/requirements-cuda.txt" || \
+            return $?
+    elif [ ! -d "${PYTHON_SITE}" ]; then
+        echo "The requested reusable Python site does not exist" >&2
+        return 2
+    fi
     PYTHONPATH="${PYTHON_SITE}" python3 - <<'PY' || return $?
 import ikpls
 import jax
 import numpy
+import pandas
+import psutil
+import sklearn
 
 devices = jax.devices()
 if not any(device.platform == "gpu" for device in devices):
     raise RuntimeError(f"CUDA JAX device is unavailable: {devices}")
-print("ikpls", getattr(ikpls, "__version__", "unknown"))
-print("numpy", numpy.__version__)
-print("jax", jax.__version__)
+expected = {
+    "ikpls": "6.1.2",
+    "jax": "0.6.2",
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "psutil": "7.1.3",
+    "sklearn": "1.7.2",
+}
+observed = {
+    "ikpls": getattr(ikpls, "__version__", "unknown"),
+    "jax": jax.__version__,
+    "numpy": numpy.__version__,
+    "pandas": pandas.__version__,
+    "psutil": psutil.__version__,
+    "sklearn": sklearn.__version__,
+}
+if observed != expected:
+    raise RuntimeError(f"Python dependency mismatch: {observed}")
+print(observed)
 print("jax_devices", devices)
 PY
     PYTHONPATH="${PYTHON_SITE}" python3 -m pip freeze \
@@ -209,7 +294,7 @@ run_figure1_fastpls() {
         --component-contract "${CONTRACT}" \
         --output "${RESULTS_ROOT}/figure1/fastpls_cpu_raw.csv" \
         --package-version "${EXPECTED_VERSION}" --repetitions 10 \
-        --timeout "${TIMEOUT_SEC}" --methods simpls
+        --methods simpls
 }
 
 run_figure1_imagenet() {
@@ -226,40 +311,30 @@ run_figure1_independent_r() {
         --repo "${PHASE1_ROOT}" --library "${PACKAGE_LIB}" \
         --tasks "${TASK_ROOT}" --contract "${CONTRACT}" \
         --results "${RESULTS_ROOT}/figure1/independent_r" \
-        --repetitions 3 --timeout "${TIMEOUT_SEC}"
+        --repetitions 3 --timeout "${TIMEOUT_SEC}" \
+        --memory-limit-mib 28672
 }
 
-run_ikpls() {
+prepare_ikpls_inputs() {
     local standard_contract="${CAMPAIGN_ROOT}/inputs/standard_contract.csv"
     local standard_inputs="${CAMPAIGN_ROOT}/inputs/ikpls_standard"
     local large_inputs="${CAMPAIGN_ROOT}/inputs/ikpls_large"
     awk -F, 'NR == 1 || ($1 != "nmr" && $1 != "imagenet")' \
-        "${CONTRACT}" >"${standard_contract}"
+        "${CONTRACT}" >"${standard_contract}" || return $?
     Rscript --vanilla \
         "${PHASE1_ROOT}/benchmark/ikpls_cross_language/export_panel_float32.R" \
-        "${TASK_ROOT}" "${standard_contract}" "${standard_inputs}"
-    PYTHONPATH="${PYTHON_SITE}" IKPLS_PYTHON=python3 python3 \
-        "${PHASE1_ROOT}/benchmark/ikpls_cross_language/run_panel.py" \
-        --inputs "${standard_inputs}" \
-        --results "${RESULTS_ROOT}/figure1/ikpls_standard" \
-        --repetitions 10 --timeout "${TIMEOUT_SEC}"
+        "${TASK_ROOT}" "${standard_contract}" "${standard_inputs}" || return $?
     mkdir -p "${large_inputs}/nmr" "${large_inputs}/imagenet"
     FASTPLS_BENCH_LIB="${PACKAGE_LIB}" Rscript --vanilla \
         "${PHASE1_ROOT}/benchmark/ikpls_cross_language/export_large_float32.R" \
-        nmr "${NMR_INPUT}" "${large_inputs}/nmr"
+        nmr "${NMR_INPUT}" "${large_inputs}/nmr" || return $?
     FASTPLS_BENCH_LIB="${PACKAGE_LIB}" Rscript --vanilla \
         "${PHASE1_ROOT}/benchmark/ikpls_cross_language/export_large_float32.R" \
-        imagenet "${TASK_ROOT}/imagenet_task.rds" "${large_inputs}/imagenet"
+        imagenet "${TASK_ROOT}/imagenet_task.rds" \
+        "${large_inputs}/imagenet" || return $?
     PYTHONPATH="${PYTHON_SITE}" python3 \
         "${PHASE1_ROOT}/benchmark/ikpls_cross_language/prepare_imagenet_float32.py" \
-        "${large_inputs}/imagenet" 10000
-    PYTHONPATH="${PYTHON_SITE}" python3 \
-        "${PHASE1_ROOT}/benchmark/ikpls_cross_language/run_large_float32.py" \
-        --data-root "${large_inputs}" \
-        --results "${RESULTS_ROOT}/figure1/ikpls_large" \
-        --datasets nmr,imagenet --nmr-components 50 \
-        --imagenet-components 1000 --timeout "${TIMEOUT_SEC}"
-
+        "${large_inputs}/imagenet" 10000 || return $?
     local cuda_inputs="${CAMPAIGN_ROOT}/inputs/ikpls_cuda"
     mkdir -p "${cuda_inputs}"
     for dataset_path in "${standard_inputs}"/*; do
@@ -268,6 +343,21 @@ run_ikpls() {
     done
     ln -sfn "${large_inputs}/nmr" "${cuda_inputs}/nmr"
     ln -sfn "${large_inputs}/imagenet" "${cuda_inputs}/imagenet"
+}
+
+run_ikpls() {
+    prepare_ikpls_inputs || return $?
+    PYTHONPATH="${PYTHON_SITE}" IKPLS_PYTHON=python3 python3 \
+        "${PHASE1_ROOT}/benchmark/ikpls_cross_language/run_panel.py" \
+        --inputs "${CAMPAIGN_ROOT}/inputs/ikpls_standard" \
+        --results "${RESULTS_ROOT}/figure1/ikpls_standard" \
+        --repetitions 10 --timeout "${TIMEOUT_SEC}" || return $?
+    PYTHONPATH="${PYTHON_SITE}" python3 \
+        "${PHASE1_ROOT}/benchmark/ikpls_cross_language/run_large_float32.py" \
+        --data-root "${CAMPAIGN_ROOT}/inputs/ikpls_large" \
+        --results "${RESULTS_ROOT}/figure1/ikpls_large" \
+        --datasets nmr,imagenet --nmr-components 50 \
+        --imagenet-components 1000 --timeout "${TIMEOUT_SEC}"
 }
 
 run_cuda_software_comparison() {
@@ -340,7 +430,7 @@ run_component_paths() {
     FASTPLS_COMPONENT_NCORES=1 \
     FASTPLS_BENCHMARK_TIMEOUT="${TIMEOUT_SEC}" \
     Rscript --vanilla "${PHASE1_ROOT}/benchmark/run_current_component_path.R" \
-        "${RESULTS_ROOT}/component_paths/standard"
+        "${RESULTS_ROOT}/component_paths/standard" || return $?
     python3 \
         "${PHASE1_ROOT}/benchmark/supplement_component_paths/run_nmr_backend_component_paths.py" \
         --library "${PACKAGE_LIB}" --task "${TASK_ROOT}/nmr_task.rds" \
@@ -458,46 +548,233 @@ run_precision_validation() {
 }
 
 run_formal() {
-    "${PHASE1_ROOT}/formal/lean/check.sh"
+    export ELAN_HOME="${LEAN_ELAN_HOME}"
+    export PATH="${ELAN_HOME}/bin:${PATH}"
+    (
+        cd "${PHASE1_ROOT}/formal/lean" || exit 1
+        ./check.sh
+    )
+}
+
+import_figure1_evidence() {
+    local source_root="${FIGURE1_EVIDENCE_ROOT}"
+    local source_hash observed_hash required legacy_root
+    if [ -z "${source_root}" ] || [ ! -d "${source_root}" ]; then
+        echo "FIGURE1_EVIDENCE_ROOT must identify the completed Figure 1 campaign" >&2
+        return 2
+    fi
+    if [ ! -f "${source_root}/source_archive.sha256" ]; then
+        echo "The Figure 1 campaign has no source archive checksum" >&2
+        return 2
+    fi
+    source_hash="$(awk 'NR == 1 {print $1}' "${source_root}/source_archive.sha256")"
+    observed_hash="$(sha256sum "${PACKAGE_ARCHIVE}" | awk '{print $1}')"
+    if [ "${source_hash}" != "${observed_hash}" ]; then
+        echo "Figure 1 and continuation archives do not match" >&2
+        return 2
+    fi
+    if ! grep -q "OpenBLAS 0.3.29" \
+        "${source_root}/openblas_configuration.txt" || \
+       ! grep -qi "HASWELL" \
+        "${source_root}/openblas_configuration.txt"; then
+        echo "Figure 1 was not generated with the required OpenBLAS build" >&2
+        return 2
+    fi
+    mkdir -p "${RESULTS_ROOT}/figure1" "${CAMPAIGN_ROOT}/provenance"
+    if [ -f "${source_root}/results/figure1/fastpls_cpu_raw.csv" ]; then
+        for required in \
+            fastpls_cpu_raw.csv \
+            imagenet_cpu/simpls_lda.csv \
+            independent_r/figure1_r_packages_raw.csv \
+            ikpls_standard/ikpls_panel_all_runs.csv \
+            python_standard/python_pls_panel_all_runs.csv; do
+            if [ ! -f "${source_root}/results/figure1/${required}" ]; then
+                echo "Missing Figure 1 evidence: ${required}" >&2
+                return 2
+            fi
+        done
+        cp -a "${source_root}/results/figure1/." "${RESULTS_ROOT}/figure1/"
+        imported_layout="raw_campaign"
+    else
+        legacy_root="${source_root}/results/table1"
+        for required in \
+            fastpls_cpu_raw.csv \
+            fastpls_imagenet/simpls_lda.csv \
+            independent_r_summary.csv \
+            ikpls_standard/ikpls_panel_all_runs.csv \
+            ikpls_large/imagenet_ikpls_f32_n1000.csv \
+            ikpls_large/nmr_ikpls_f32_n50.csv \
+            scikit_standard/python_pls_panel_all_runs.csv \
+            scikit_large/python_pls_large_all_runs.csv \
+            figure1_data.csv Figure1_corrected.pdf Figure1_corrected.png; do
+            if [ ! -f "${legacy_root}/${required}" ]; then
+                echo "Missing finalized Figure 1 evidence: ${required}" >&2
+                return 2
+            fi
+        done
+        mkdir -p \
+            "${RESULTS_ROOT}/figure1/final" \
+            "${RESULTS_ROOT}/figure1/imagenet_cpu" \
+            "${RESULTS_ROOT}/figure1/independent_r"
+        cp "${legacy_root}/fastpls_cpu_raw.csv" \
+            "${RESULTS_ROOT}/figure1/fastpls_cpu_raw.csv"
+        cp "${legacy_root}/fastpls_imagenet/simpls_lda.csv" \
+            "${RESULTS_ROOT}/figure1/imagenet_cpu/simpls_lda.csv"
+        cp "${legacy_root}/independent_r_summary.csv" \
+            "${RESULTS_ROOT}/figure1/independent_r/figure1_r_packages_summary.csv"
+        cp -a "${legacy_root}/ikpls_standard" \
+            "${RESULTS_ROOT}/figure1/ikpls_standard"
+        cp -a "${legacy_root}/ikpls_large" \
+            "${RESULTS_ROOT}/figure1/ikpls_large"
+        cp -a "${legacy_root}/scikit_standard" \
+            "${RESULTS_ROOT}/figure1/python_standard"
+        cp -a "${legacy_root}/scikit_large" \
+            "${RESULTS_ROOT}/figure1/python_large"
+        cp "${legacy_root}/figure1_data.csv" \
+            "${legacy_root}/Figure1_corrected.pdf" \
+            "${legacy_root}/Figure1_corrected.png" \
+            "${legacy_root}/Table1_prepared_benchmark_dimensions.csv" \
+            "${legacy_root}/fastpls_cpu_summary.csv" \
+            "${legacy_root}/fastpls_imagenet_summary.csv" \
+            "${legacy_root}/independent_r_summary.csv" \
+            "${legacy_root}/table1_three_method_status.csv" \
+            "${RESULTS_ROOT}/figure1/final/"
+        imported_layout="final_table1_bundle"
+    fi
+    cat >"${CAMPAIGN_ROOT}/provenance/imported_figure1.txt" <<EOF
+source_campaign=${source_root}
+source_archive_sha256=${source_hash}
+source_id=${SOURCE_ID}
+layout=${imported_layout}
+imported_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+}
+
+record_imported_figure1_stages() {
+    local timestamp stage
+    timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    for stage in \
+        figure1_fastpls figure1_imagenet figure1_independent_r \
+        figure1_ikpls figure1_python; do
+        printf '%s\t%s\t%s\t0\n' \
+            "${stage}" "${timestamp}" "${timestamp}" >>"${STATUS_FILE}"
+        printf 'Imported without recomputation from %s after archive and BLAS validation.\n' \
+            "${FIGURE1_EVIDENCE_ROOT}" >"${LOG_ROOT}/${stage}.log"
+    done
 }
 
 record_environment() {
+    local require_independent="true"
+    if [ "${CAMPAIGN_SCOPE}" = "remaining" ]; then
+        require_independent="false"
+    fi
     BENCHMARK_HOST_ID="${BENCHMARK_HOST_ID}" \
+        FASTPLS_REQUIRE_INDEPENDENT_PACKAGES="${require_independent}" \
         "${PHASE1_ROOT}/scripts/record_campaign_environment.sh" \
         "${PACKAGE_LIB}" "${CAMPAIGN_ROOT}/provenance"
 }
 
-export EXPECTED_VERSION
-run_required_stage verify_source verify_source
-run_required_stage prepare_dependencies prepare_dependencies
-run_required_stage install_package install_package
-run_required_stage package_test_suite run_package_tests
-run_required_stage prepare_tasks prepare_tasks
-run_required_stage prepare_python prepare_python
-run_required_stage record_environment record_environment
-run_stage figure1_fastpls run_figure1_fastpls
-run_stage figure1_imagenet run_figure1_imagenet
-run_stage figure1_independent_r run_figure1_independent_r
-run_stage figure1_ikpls run_ikpls
-run_stage figure1_python run_python_independent
-run_stage supplementary_cuda_software run_cuda_software_comparison
-run_stage figure2_selected_backends run_selected_backends
-run_stage figure2_cross_validation run_cross_validation
-run_stage supplementary_component_paths run_component_paths
-run_stage training_component_selection run_training_component_selection
-run_stage nmr_selection_plssvd run_nmr_training_selection plssvd
-run_stage nmr_selection_simpls run_nmr_training_selection simpls
-run_stage figure3_nmr run_nmr
-run_stage figure4_imagenet run_imagenet
-run_stage validation_simpls_dense run_simpls_validation
-run_stage validation_rsvd_cpu run_rsvd_validation cpu
-run_stage validation_rsvd_cuda run_rsvd_validation cuda
-run_stage validation_opls_kernel_estimator run_opls_kernel_estimator_validation
-run_stage validation_opls_kernel_settings run_opls_kernel_setting_validation
-run_stage validation_precision_cpu run_precision_validation cpu
-run_stage validation_precision_cuda run_precision_validation cuda
-run_stage formal_invariants run_formal
-run_required_stage campaign_audit python3 \
-    "${PHASE1_ROOT}/scripts/audit_cmpb_campaign.py" "${CAMPAIGN_ROOT}"
+run_common_setup() {
+    run_required_stage verify_source verify_source
+    run_required_stage prepare_dependencies prepare_dependencies
+    run_required_stage prepare_lean prepare_lean
+    run_required_stage install_package install_package
+    run_required_stage package_test_suite run_package_tests
+    run_required_stage prepare_tasks prepare_tasks
+    run_required_stage record_environment record_environment
+}
 
-echo "Campaign completed. Inspect ${STATUS_FILE} and every retained result row."
+run_full_campaign() {
+    run_common_setup
+    run_required_stage prepare_python prepare_python
+    run_stage figure1_fastpls run_figure1_fastpls
+    run_stage figure1_imagenet run_figure1_imagenet
+    run_stage figure1_independent_r run_figure1_independent_r
+    run_stage figure1_ikpls run_ikpls
+    run_stage figure1_python run_python_independent
+    run_stage supplementary_cuda_software run_cuda_software_comparison
+    run_stage figure2_selected_backends run_selected_backends
+    run_stage figure2_cross_validation run_cross_validation
+    run_stage supplementary_component_paths run_component_paths
+    run_stage training_component_selection run_training_component_selection
+    run_stage nmr_selection_plssvd run_nmr_training_selection plssvd
+    run_stage nmr_selection_simpls run_nmr_training_selection simpls
+    run_stage figure3_nmr run_nmr
+    run_stage figure4_imagenet run_imagenet
+    run_stage validation_simpls_dense run_simpls_validation
+    run_stage validation_rsvd_cpu run_rsvd_validation cpu
+    run_stage validation_rsvd_cuda run_rsvd_validation cuda
+    run_stage validation_opls_kernel_estimator \
+        run_opls_kernel_estimator_validation
+    run_stage validation_opls_kernel_settings \
+        run_opls_kernel_setting_validation
+    run_stage validation_precision_cpu run_precision_validation cpu
+    run_stage validation_precision_cuda run_precision_validation cuda
+    run_stage formal_invariants run_formal
+    run_required_stage campaign_audit python3 \
+        "${PHASE1_ROOT}/scripts/audit_cmpb_campaign.py" "${CAMPAIGN_ROOT}"
+}
+
+run_verified_fastpls_timings() {
+    run_common_setup
+    run_required_stage prepare_python prepare_python
+    run_required_stage prepare_ikpls_inputs prepare_ikpls_inputs
+    run_required_stage figure1_fastpls run_figure1_fastpls
+    run_required_stage figure1_imagenet run_figure1_imagenet
+    run_required_stage supplementary_cuda_software \
+        run_cuda_software_comparison
+    run_required_stage figure2_selected_backends run_selected_backends
+    run_required_stage figure2_cross_validation run_cross_validation
+    run_required_stage supplementary_component_paths run_component_paths
+    run_required_stage figure3_nmr run_nmr
+    run_required_stage figure4_imagenet run_imagenet
+}
+
+run_remaining_campaign() {
+    run_common_setup
+    run_required_stage prepare_python prepare_python
+    run_required_stage import_figure1_evidence import_figure1_evidence
+    record_imported_figure1_stages
+    run_required_stage prepare_ikpls_inputs prepare_ikpls_inputs
+    run_stage supplementary_cuda_software run_cuda_software_comparison
+    run_stage figure2_selected_backends run_selected_backends
+    run_stage figure2_cross_validation run_cross_validation
+    run_stage supplementary_component_paths run_component_paths
+    run_stage training_component_selection run_training_component_selection
+    run_stage nmr_selection_plssvd run_nmr_training_selection plssvd
+    run_stage nmr_selection_simpls run_nmr_training_selection simpls
+    run_stage figure3_nmr run_nmr
+    run_stage figure4_imagenet run_imagenet
+    run_stage validation_simpls_dense run_simpls_validation
+    run_stage validation_rsvd_cpu run_rsvd_validation cpu
+    run_stage validation_rsvd_cuda run_rsvd_validation cuda
+    run_stage validation_opls_kernel_estimator \
+        run_opls_kernel_estimator_validation
+    run_stage validation_opls_kernel_settings \
+        run_opls_kernel_setting_validation
+    run_stage validation_precision_cpu run_precision_validation cpu
+    run_stage validation_precision_cuda run_precision_validation cuda
+    run_stage formal_invariants run_formal
+    run_required_stage campaign_audit python3 \
+        "${PHASE1_ROOT}/scripts/audit_cmpb_campaign.py" "${CAMPAIGN_ROOT}"
+}
+
+export EXPECTED_VERSION
+case "${CAMPAIGN_SCOPE}" in
+    full)
+        run_full_campaign
+        ;;
+    fastpls-timing)
+        run_verified_fastpls_timings
+        ;;
+    remaining)
+        run_remaining_campaign
+        ;;
+    *)
+        echo "CAMPAIGN_SCOPE must be full, fastpls-timing, or remaining" >&2
+        exit 2
+        ;;
+esac
+
+echo "Campaign scope ${CAMPAIGN_SCOPE} completed."
+echo "Inspect ${STATUS_FILE} and every retained result row."

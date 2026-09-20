@@ -113,7 +113,6 @@ fit_one <- function(task, family, precision, classifier = "argmax", kernel = "li
       ytest <- float::fl(ytest)
     }
   }
-  svd_method <- if (identical(backend, "cuda")) "rsvd" else "rsvd"
   elapsed <- system.time({
     fit <- fastPLS::pls(
       Xtrain = Xtrain,
@@ -124,7 +123,6 @@ fit_one <- function(task, family, precision, classifier = "argmax", kernel = "li
       method = family,
       kernel = kernel,
       backend = backend,
-      svd.method = svd_method,
       scaling = "centering",
       classifier = classifier,
       fit = TRUE,

@@ -5,10 +5,19 @@ CMPB,Figure 2 CPU CUDA,benchmark/current_release_evidence/run_selected_backends.
 CMPB,Figure 2 cross-validation,benchmark/gpu_cross_validation; benchmark/current_release_evidence/build_figure2_with_cv.R,figure and source table,current
 CMPB,Figure 3 NMR,benchmark/benchmark_nmr_component_selection.R; benchmark/benchmark_nmr_qualified_solver.R; benchmark/benchmark_nmr_deposited_reference.R; tools/build_nmr_figure3_family_components.R,figure and source table,current
 CMPB,Figure 4 ImageNet,benchmark/benchmark_imagenet_current_fused_lda.R; benchmark/plot_imagenet_current.R,figure and source table,current
-CMPB supplement,Numerical validation,benchmark/benchmark_simpls_exact_reference.R; benchmark/benchmark_simpls_estimator_preservation.R; benchmark/controlled_scaling,numerical audit,current
-CMPB supplement,SIMPLS execution ablation,benchmark/benchmark_simpls_multidataset_ablation.R; benchmark/summarize_simpls_multidataset_ablation.R,table,current
-CMPB supplement,OPLS and kernel PLS validation,benchmark/benchmark_opls_kernel_estimator_validation.R; benchmark/benchmark_opls_kernel_setting_reliability.R; benchmark/benchmark_kernel_sensitivity.R,table,current
-CMPB supplement,Component paths,benchmark/run_current_component_selection.R; benchmark/run_current_component_path.R; benchmark/supplement_component_paths,figures and tables,current
-CMPB supplement,Precision and backend agreement,benchmark/benchmark_float32_backend_agreement.R; benchmark/summarize_precision_memory_comparison.R,table and figure,current
+CMPB supplement,Table S1 numerical validation,benchmark/benchmark_simpls_exact_reference.R; benchmark/controlled_scaling; benchmark/benchmark_opls_kernel_estimator_validation.R; benchmark/benchmark_float32_backend_agreement.R,table and source results,current
+CMPB supplement,Table S2 formal invariants,formal/lean,machine-checked proof and table,current
+CMPB supplement,Tables S3-S4 independent methods and measurement,config/independent_method_contract.csv; config/measurement_contract.csv,tables,current
+CMPB supplement,Tables S5-S6 selected CPU CUDA results,benchmark/current_release_evidence/run_selected_backends.py,tables,current
+CMPB supplement,Table S7 ImageNet component path,benchmark/benchmark_imagenet_current_fused_lda.R,table,current
+CMPB supplement,Table S8 platform provenance,scripts/record_campaign_environment.sh,table,current
+CMPB supplement,Figures S1-S12 component paths,benchmark/run_current_component_selection.R; benchmark/run_current_component_path.R; benchmark/supplement_component_paths,figures and source tables,current
+CMPB supplement,Figure S13 CUDA software comparison,benchmark/current_release_evidence/figure_s_cuda_worker.R; tools/build_supplement_cuda_ikpls_figure.R,figure and source table,current
 CMPB supplement,Figure S14 localized NMR error,benchmark/analyze_nmr_localized_error.R,figure and source tables,current
-CMPB supplement,Formal invariants,formal/lean,machine-checked proof,current
+CMPB,Narrative quantitative summary,scripts/summarize_cmpb_narrative.py,JSON derived from audited figure and table sources,current
+CMPB,Distribution archive equivalence,scripts/verify_distribution_archive_equivalence.py,normalized archive comparison and JSON provenance,current
+CMPB,Campaign finalization,scripts/finalize_cmpb_campaign.sh,placeholder repair strict audit and final asset build,current
+CMPB,Asset inventory audit,scripts/audit_cmpb_assets.py,exact numbered inventory signatures and table dimensions,current
+CMPB,Pseudocode source contract,tools/audit_cmpb_pseudocode_contract.py,assembled algorithm tables checked against frozen C++ source contracts,current
+CMPB,Document layout contract,tools/audit_cmpb_document_layout.py,portrait sections and continuous line-numbering audit,current
+CMPB,Submission document build,scripts/build_cmpb_submission.sh,definitive assets and audited DOCX files,current

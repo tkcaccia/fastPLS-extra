@@ -312,15 +312,34 @@ make_cases <- function() {
     tune = TRUE
   )
 
-  data(breast, package = "fastPLS", envir = environment())
+  iris_data <- datasets::iris
+  iris_train <- c(1:40, 51:90, 101:140)
+  iris_test <- setdiff(seq_len(nrow(iris_data)), iris_train)
+  iris_raw <- as.matrix(iris_data[, 1:4])
+  iris_features <- cbind(
+    iris_raw,
+    iris_raw^2,
+    outer_products = t(vapply(
+      seq_len(nrow(iris_raw)),
+      function(i) {
+        value <- iris_raw[i, ]
+        c(
+          value[1L] * value[2L], value[1L] * value[3L],
+          value[1L] * value[4L], value[2L] * value[3L],
+          value[2L] * value[4L], value[3L] * value[4L]
+        )
+      },
+      numeric(6L)
+    ))
+  )
   cases[[length(cases) + 1L]] <- list(
-    name = "breast_real_classification",
+    name = "iris_real_classification",
     source = "real",
     task = "classification",
-    x_train = as.matrix(breast$X_train),
-    x_test = as.matrix(breast$X_test),
-    y_train = breast$y_train,
-    y_test = breast$y_test,
+    x_train = iris_features[iris_train, , drop = FALSE],
+    x_test = iris_features[iris_test, , drop = FALSE],
+    y_train = droplevels(iris_data$Species[iris_train]),
+    y_test = droplevels(iris_data$Species[iris_test]),
     ncomp = 3L,
     north = 1L,
     tune = TRUE
@@ -347,7 +366,6 @@ validate_opls <- function(case) {
     north = case$north,
     scaling = "autoscaling",
     backend = "cpu",
-    svd.method = "irlba",
     fit = TRUE,
     proj = TRUE,
     return_variance = FALSE,
@@ -392,7 +410,7 @@ validate_opls <- function(case) {
       north = case$north,
       kernel = NA_character_,
       solver = if (min(ncol(case$x_train), ncol(xy$y_train_matrix)) < 6L)
-        "exact_small_dimension_fallback" else "deterministic_irlba",
+        "exact_small_dimension_fallback" else "rsvd",
       operator_relative_error = relative_error(
         fast_filter_operator, reference_filter_operator
       ),
@@ -446,7 +464,6 @@ validate_kernel <- function(case, kernel) {
     coef0 = coef0,
     scaling = "autoscaling",
     backend = "cpu",
-    svd.method = "irlba",
     fit = TRUE,
     proj = TRUE,
     return_variance = FALSE,
@@ -506,7 +523,7 @@ validate_kernel <- function(case, kernel) {
       north = NA_integer_,
       kernel = kernel,
       solver = if (min(nrow(case$x_train), ncol(xy$y_train_matrix)) < 6L)
-        "exact_small_dimension_fallback" else "deterministic_irlba",
+        "exact_small_dimension_fallback" else "rsvd",
       operator_relative_error = relative_error(
         fast_train_centered, centered$train
       ),
@@ -844,8 +861,9 @@ report <- c(
     "OPLS was compared with an independent equation-level orthogonal filter",
     "followed by `pls::simpls.fit`. Nonlinear kernel PLS was compared with",
     "independently constructed and centered RBF/polynomial Gram matrices followed",
-    "by `pls::simpls.fit`. Deterministic IRLBA was requested; documented exact",
-    "fallbacks occur only when the smaller cross-covariance dimension is below six."
+    "by `pls::simpls.fit`. The fastPLS calculations used the current public rSVD",
+    "path; the package uses its documented exact small-dimension path when the",
+    "smaller cross-covariance dimension is below six."
   ),
   "",
   "## Summary",

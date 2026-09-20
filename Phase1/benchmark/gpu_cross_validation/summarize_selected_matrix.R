@@ -29,11 +29,19 @@ raw <- rbind(
 if (is.null(raw) || !nrow(raw)) stop("No result rows were found.")
 
 raw$dataset[grepl("^imagenet", tolower(raw$dataset))] <- "imagenet"
-raw$ok <- is.finite(raw$elapsed_sec) & raw$status != "error"
+failure_statuses <- c("error", "failed", "timeout", "process_failure")
+raw$ok <- is.finite(raw$elapsed_sec) &
+    !tolower(raw$status) %in% failure_statuses
 raw$classifier[is.na(raw$classifier) | !nzchar(raw$classifier)] <- "regression"
 raw$selection_metric <- raw$selection
 raw$ncomp <- raw$requested_ncomp
-if (!"error" %in% names(raw)) raw$error <- ""
+if (!"error" %in% names(raw)) {
+    raw$error <- if ("error_message" %in% names(raw)) {
+        raw$error_message
+    } else {
+        ""
+    }
+}
 raw$control_profile <- "default_rsvd"
 raw$oversample <- 32L
 raw$power <- 5L

@@ -203,6 +203,7 @@ dataset_filename <- function(dataset_id) {
 find_dataset_rdata <- function(dataset_id) {
   dataset_id <- tolower(dataset_id)
   home_dir <- path.expand("~")
+  data_root <- Sys.getenv("FASTPLS_DATA_ROOT", "")
   env_name <- sprintf("FASTPLS_%s_RDATA", toupper(dataset_id))
   fname <- dataset_filename(dataset_id)
   fnames <- switch(
@@ -216,6 +217,11 @@ find_dataset_rdata <- function(dataset_id) {
   )
   candidates <- c(
     Sys.getenv(env_name, ""),
+    if (nzchar(data_root)) {
+      file.path(data_root, fnames)
+    } else {
+      character()
+    },
     unlist(lapply(fnames, function(one_fname) {
       c(
         file.path(home_dir, "Documents", "fastEmbedR", "Data",

@@ -302,7 +302,7 @@ def main():
     component_methods.text = (
         "For the eleven general benchmark datasets, component counts were selected "
         "using only the training partition. Ten fixed folds (seed 123) were used "
-        "with float32 inputs and the CPU rSVD route in fastPLS 0.99.65. At every "
+        "with float32 inputs and the CPU rSVD route in fastPLS 0.3. At every "
         "admissible count, classification evaluated both argmax and LDA and retained "
         "the component-head pair with the greatest pooled out-of-fold accuracy. "
         "Regression retained the component count with the smallest pooled "
@@ -317,7 +317,7 @@ def main():
 
     find_paragraph(document, "Table S11.").text = (
         "Table S11. Training-only component and prediction-head selections for "
-        "PLS-SVD, SIMPLS, OPLS and linear kernel PLS in fastPLS 0.99.65."
+        "PLS-SVD, SIMPLS-family, OPLS and linear kernel PLS in fastPLS 0.3."
     )
     find_paragraph(document, "Table S12.").text = (
         "Table S12. Spearman associations with requested component count for the "
@@ -333,8 +333,8 @@ def main():
 
     figure_root = Path(args.figures)
     general_caption = (
-        "PLS-SVD, SIMPLS, OPLS and linear kernel PLS used matched float32 "
-        "inputs in fastPLS 0.99.65. "
+        "PLS-SVD, SIMPLS-family, OPLS and linear kernel PLS used matched float32 "
+        "inputs in fastPLS 0.3. "
         "Mac CPU, Metal, Linux CPU and CUDA are distinguished by colour; solid lines "
         "show argmax and dashed lines show LDA. Regression paths are solid because "
         "classification heads do not apply. Points are medians of three fresh-process "
@@ -373,14 +373,14 @@ def main():
         "and kernel PLS used the linear kernel."
     )
     find_paragraph(document, "Table S13.").text = (
-        "Table S13. NMR training-only one-standard-error component decisions in "
-        "fastPLS 0.99.65."
+        "Table S13. NMR training-only one-standard-error component decisions."
     )
     nmr_caption = find_paragraph(document, "Figure S12.")
     replace_picture(paragraph_before(nmr_caption), Path(args.nmr_figure))
     nmr_caption.text = (
         "Figure S12. NMR component-dependent prediction and computation using "
-        "float32 inputs in fastPLS 0.99.66. PLS-SVD, SIMPLS, OPLS and linear kernel "
+        "float32 inputs in fastPLS 0.3. PLS-SVD, SIMPLS-family, OPLS and linear "
+        "kernel "
         "PLS were fitted only on the predefined 1,200-spectrum training partition "
         "and evaluated on the fixed 321-spectrum test partition. Rows report held-out "
         "RMSD, complete fitting-plus-prediction time and baseline-corrected peak host "

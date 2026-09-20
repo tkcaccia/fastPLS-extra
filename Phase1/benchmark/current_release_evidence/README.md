@@ -66,9 +66,53 @@ The rows fit centred SIMPLS with rSVD, `oversample = 32`, `power = 5`, and
 and MAE. The worker uses `fit = FALSE` and requests no fitted responses,
 training-score matrix, variance summaries, projections, or loading matrices.
 SIMPLS-LDA keeps only the compact class and score moments needed to fit the
-classifier. Each worker requests one CPU core and records both `fastPLS_blas()`
-and the BLAS path reported by R; the
+classifier. Each worker requests one CPU core and records the detailed
+`fastPLS_blas()` report and the BLAS path reported by R; the
 publication run requires an OpenBLAS-linked package.
+The complete campaign accepts an explicit `OPENBLAS_ROOT` and validates the
+loaded OpenBLAS version and CPU kernel before installation. CMPB runs on the
+Intel workstation require OpenBLAS 0.3.29 with the Haswell kernel; the exact
+configuration and resolved shared-library path are written to
+`openblas_configuration.txt`. This prevents an older distribution library
+from being reported under a newer hard-coded version label.
+
+OpenBLAS builds are not interchangeable benchmark conditions. In particular,
+`fastPLS_blas()` now reports the library family, version, and selected
+dynamic-architecture kernel. The campaign additionally validates those fields
+before installation. A Chiamaka campaign
+that linked OpenBLAS 0.3.20 and selected the Prescott kernel must not be labelled
+as, or pooled with, the verified OpenBLAS 0.3.29/Haswell campaign.
+
+After an already-running campaign has finished, rerun the fastPLS timing stages
+in a new external results directory. Do not stop or overwrite the original
+campaign. The timing-only scope installs one newly frozen source archive,
+verifies the OpenBLAS library before fitting, prepares the common inputs, and
+reruns the fastPLS rows used by Figures 1--4 and the timing-bearing
+supplementary paths. If the package source changed after the earlier campaign,
+build a new archive and record its new commit and checksum rather than
+relabelling the earlier archive:
+
+```bash
+PACKAGE_ARCHIVE=/absolute/path/fastPLS_0.3.tar.gz \
+CAMPAIGN_ROOT=/absolute/results/campaign_openblas_0.3.29_haswell \
+SEED_TASK_ROOT=/absolute/tasks \
+NMR_INPUT=/absolute/data/NMR.RData \
+IMAGENET_TASK_RDS=/absolute/data/imagenet_task.rds \
+OPENBLAS_ROOT=/home/chiamaka/fastPLS_openblas_0.3.29/root \
+EXPECTED_OPENBLAS_VERSION=0.3.29 \
+EXPECTED_OPENBLAS_CORE=Haswell \
+CAMPAIGN_SCOPE=fastpls-timing \
+BENCHMARK_HOST_ID=chiamaka \
+SOURCE_ID=FULL_GIT_COMMIT \
+bash scripts/run_cmpb_release_campaign.sh
+```
+
+The command requires the same remaining campaign variables as the full run,
+including the archive checksum and deposited NMR comparator location. Its
+`stage_status.tsv`, `openblas_configuration.txt`, installation log, and result
+rows form a separate evidence set. Only after every required stage succeeds
+should the manuscript timing summaries and graphics be regenerated from this
+verified set.
 Supply the release with `--package-version`; each worker verifies the loaded
 package before fitting, so the same scripts can be reused without relabelling
 older evidence.
@@ -119,11 +163,14 @@ splits independently. With no `--datasets` argument it runs every non-ImageNet
 row in the component contract; ImageNet uses the dedicated bounded-memory
 worker described below.
 
-The R-package runner defaults to three isolated-process repetitions. When its
-first successful run exceeds 300 seconds, it retains that measured run and
-records the remaining repetitions as `not_repeated_long_runtime`; failed runs
-are likewise retained and not repeatedly relaunched. The summary reports the
-actual successful repetition count for every method-dataset cell.
+The R-package runner requests up to three isolated-process repetitions for
+every planned method-dataset cell. Each attempted repetition has its own
+1,800-second timeout and memory guard. If the first attempt fails or reaches a
+resource limit, repetitions two and three are not launched; explicit linked
+rows retain those planned positions in the output grid. Completed, failed,
+resource-limited and timed-out attempts are retained, and the summary reports
+the requested, attempted and successful repetition counts for every
+method-dataset cell.
 
 `prepare_figure1_tasks.R` creates the exact prepared tasks used by independent
 implementations. `run_figure1_r_packages.py` executes the selected R workflows

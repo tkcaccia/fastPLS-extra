@@ -78,7 +78,7 @@ principal_angle <- function(value, reference) {
 }
 
 last_numeric_prediction <- function(prediction) {
-    score <- prediction$Yscore
+    score <- prediction$Yscore %||% prediction$Ypred_scores
     if (!is.null(score)) {
         return(score[, , dim(score)[[3L]], drop = FALSE][, , 1L])
     }

@@ -1,11 +1,11 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 3L) {
+if (length(args) != 4L) {
     stop(
         paste(
             "Usage: plot_nmr_component_selection.R",
-            "BACKEND_COMPONENT_RAW SELECTION_CSV OUTPUT_DIR"
+            "BACKEND_COMPONENT_RAW PLSSVD_DECISION SIMPLS_DECISION OUTPUT_DIR"
         ),
         call. = FALSE
     )
@@ -23,8 +23,20 @@ suppressPackageStartupMessages({
 })
 
 raw <- fread(normalizePath(args[[1L]], mustWork = TRUE))
-decision <- fread(normalizePath(args[[2L]], mustWork = TRUE))
-output_dir <- normalizePath(args[[3L]], mustWork = FALSE)
+decision <- rbindlist(list(
+    cbind(
+        family = "plssvd",
+        fread(normalizePath(args[[2L]], mustWork = TRUE))
+    ),
+    cbind(
+        family = "simpls",
+        fread(normalizePath(args[[3L]], mustWork = TRUE))
+    )
+), use.names = TRUE, fill = TRUE)
+if (nrow(decision) != 2L || any(!is.finite(decision$selected_ncomp))) {
+    stop("The NMR one-standard-error decisions are incomplete.")
+}
+output_dir <- normalizePath(args[[4L]], mustWork = FALSE)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 required_columns <- c(
@@ -41,21 +53,18 @@ if (length(setdiff(required_columns, names(raw)))) {
 raw <- raw[status == "success"]
 if (!nrow(raw)) stop("No successful NMR component-path rows were found.")
 
-family_levels <- c("PLS-SVD", "SIMPLS", "OPLS", "kernel PLS")
+family_levels <- c("PLS-SVD", "SIMPLS-family", "OPLS", "kernel PLS")
 family_labels <- c(
-    plssvd = "PLS-SVD", simpls = "SIMPLS", opls = "OPLS",
+    plssvd = "PLS-SVD", simpls = "SIMPLS-family", opls = "OPLS",
     kernelpls = "kernel PLS"
 )
-fixed_components <- c(
-    plssvd = 100L, simpls = 50L, opls = 50L, kernelpls = 50L
-)
-decision[, selected_ncomp := as.integer(fixed_components[family])]
+decision[, selected_ncomp := as.integer(selected_ncomp)]
 raw[, family_label := factor(family_labels[family], levels = family_levels)]
 decision[, family_label := factor(family_labels[family], levels = family_levels)]
 
 architecture_labels <- c(
-    "Linux workstation.cpu" = "Linux CPU",
-    "Linux workstation.cuda" = "CUDA"
+    "linux_nvidia.cpu" = "Linux CPU",
+    "linux_nvidia.cuda" = "CUDA"
 )
 raw[, architecture := architecture_labels[paste(platform, backend, sep = ".")]]
 raw <- raw[!is.na(architecture)]
@@ -90,8 +99,8 @@ summary[, measure := factor(
 fwrite(summary, file.path(output_dir, "nmr_test_component_path_summary.csv"))
 fwrite(decision, file.path(output_dir, "nmr_training_selected_components.csv"))
 
-architecture_colours <- c("Linux CPU" = "#0072B2", "CUDA" = "#D55E00")
-architecture_shapes <- c("Linux CPU" = 21, "CUDA" = 24)
+architecture_colours <- c("Linux CPU" = "#009E73", "CUDA" = "#CC79A7")
+architecture_shapes <- c("Linux CPU" = 23, "CUDA" = 24)
 figure <- ggplot(
     summary,
     aes(

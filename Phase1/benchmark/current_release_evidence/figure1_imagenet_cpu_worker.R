@@ -12,10 +12,12 @@ classifier <- match.arg(args[[3L]], c("argmax", "lda"))
 output_path <- args[[4L]]
 
 library(fastPLS, lib.loc = Sys.getenv("FASTPLS_BENCH_LIBRARY"))
-if (as.character(packageVersion("fastPLS")) != "0.99.65") {
-    stop("The Figure 1 ImageNet worker requires fastPLS 0.99.65")
+expected_version <- Sys.getenv("FASTPLS_EXPECTED_VERSION", unset = "0.3")
+if (as.character(packageVersion("fastPLS")) != expected_version) {
+    stop("The Figure 1 ImageNet worker requires fastPLS ", expected_version)
 }
-if (!identical(fastPLS_blas(), "OpenBLAS")) {
+blas_information <- fastPLS_blas()
+if (!identical(blas_information$backend, "OpenBLAS")) {
     stop("The Figure 1 ImageNet worker requires the OpenBLAS-linked build")
 }
 
@@ -89,9 +91,16 @@ row <- data.frame(
     precision = "float32",
     workstation = paste(
         "Ubuntu 22.04; Intel Core i7-13700; 32 GiB RAM;",
-        "OpenBLAS 0.3.29"
+        Sys.getenv(
+            "FASTPLS_BENCH_BLAS_DESCRIPTION",
+            unset = blas_information$configuration
+        )
     ),
     package_version = as.character(packageVersion("fastPLS")),
+    blas_version = blas_information$version,
+    blas_configuration = blas_information$configuration,
+    blas_core = blas_information$core,
+    blas_library = blas_information$library,
     method = method,
     classifier = classifier,
     solver = fit$diagnostics$solver,

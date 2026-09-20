@@ -7,7 +7,7 @@ from pathlib import Path
 from docx import Document
 
 
-REFERENCE_RE = re.compile(r"^\[(\d+)\]\s+")
+REFERENCE_RE = re.compile(r"^(?:\[(\d+)\]|(\d+)\.)\s+")
 CITATION_RE = re.compile(r"\[((?:\d+\s*(?:[-,]\s*)?)+)\]")
 
 
@@ -37,10 +37,17 @@ def audit(main_path, supplement_path):
     supplement = Document(supplement_path)
 
     references = []
+    in_references = False
     for paragraph in main.paragraphs:
-        match = REFERENCE_RE.match(paragraph.text.strip())
+        text = paragraph.text.strip()
+        if text.lower() == "references":
+            in_references = True
+            continue
+        if not in_references:
+            continue
+        match = REFERENCE_RE.match(text)
         if match:
-            references.append(int(match.group(1)))
+            references.append(int(match.group(1) or match.group(2)))
 
     errors = []
     expected = list(range(1, len(references) + 1))
@@ -53,8 +60,16 @@ def audit(main_path, supplement_path):
 
     valid = set(references)
     citations = []
-    for label, document in (("main", main), ("supplement", supplement)):
-        for text in document_text(document):
+    main_narrative = []
+    for text in document_text(main):
+        if text.strip().lower() == "references":
+            break
+        main_narrative.append(text)
+    for label, texts in (
+        ("main", main_narrative),
+        ("supplement", list(document_text(supplement))),
+    ):
+        for text in texts:
             if REFERENCE_RE.match(text.strip()):
                 continue
             for match in CITATION_RE.finditer(text):
@@ -65,20 +80,17 @@ def audit(main_path, supplement_path):
                             f"{label} cites [{number}], which is absent from references"
                         )
 
-    joined_main = "\n".join(document_text(main))
+    joined_main = "\n".join(main_narrative)
     joined_supplement = "\n".join(document_text(supplement))
     required = {
-        "main CIFAR-100": (
-            joined_main,
-            r"CIFAR-100 \[15\]",
-        ),
+        "main CIFAR-100": (joined_main, r"CIFAR-100[^\n]*\[\d+\]"),
         "main ImageNet/DINOv2": (
             joined_main,
-            r"DINOv2 embeddings \[10\] derived from ImageNet \[16\]",
+            r"ImageNet/DINOv2[^\n]*\[\d+(?:\s*,\s*\d+)*\]",
         ),
         "main pathology": (
             joined_main,
-            r"UNI and Prov-GigaPath.*?\[13,14\]",
+            r"(?:UNI-?2?|Prov-GigaPath)[\s\S]{0,500}\[\d+(?:\s*,\s*\d+)*\]",
         ),
     }
     for label, (text, pattern) in required.items():

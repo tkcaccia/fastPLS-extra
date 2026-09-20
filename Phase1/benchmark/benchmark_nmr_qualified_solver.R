@@ -266,6 +266,15 @@ for (replicate_id in seq_len(replicates)) {
   )
   if (replicate_id == 1L && nzchar(prediction_output)) {
     reference_prediction <- list(
+      dataset = "nmr",
+      family = family,
+      backend = backend,
+      solver = solver,
+      precision = precision,
+      ncomp = ncomp,
+      seed = seed,
+      package_version = as.character(utils::packageVersion("fastPLS")),
+      source_archive_sha256 = source_archive_sha256,
       observed = Ytest,
       predicted = prediction,
       per_sample_rmsd = per_sample_rmsd,

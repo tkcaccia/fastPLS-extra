@@ -74,6 +74,7 @@ def main():
     parser.add_argument("--r-packages", required=True)
     parser.add_argument("--python", default="")
     parser.add_argument("--python-status", default="")
+    parser.add_argument("--python-large", default="")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     assembled = []
@@ -228,6 +229,34 @@ def main():
         task = "regression" if dataset in {"cbmc_citeseq", "prism", "nmr"} else "classification"
         row = base_row(dataset, task, PYTHON_LABELS[implementation], args.python_status)
         row.update({"status": value.get("status", "failed")})
+        assembled.append(row)
+
+    for value in rows(args.python_large):
+        implementation = value.get("implementation", "")
+        if implementation not in PYTHON_LABELS:
+            continue
+        dataset = normalized_dataset(value.get("dataset", ""))
+        task = value.get("task_type") or (
+            "regression" if dataset == "nmr" else "classification"
+        )
+        status = value.get("status", "success")
+        row = base_row(
+            dataset, task, PYTHON_LABELS[implementation], args.python_large
+        )
+        row.update({
+            "ncomp_requested": value.get("ncomp", ""),
+            "ncomp": value.get("ncomp", ""),
+            "status": status,
+            "accuracy": value.get("accuracy", "") if status == "success" else "",
+            "rmsd": value.get("rmsd", "") if status == "success" else "",
+            "q2": value.get("q2", "") if status == "success" else "",
+            "total_sec": value.get("total_sec", "") if status == "success" else "",
+            "peak_rss_mib": (
+                value.get("peak_rss_mib", "") if status == "success" else ""
+            ),
+            "repetitions": value.get("replicate", "1"),
+            "precision": value.get("precision", ""),
+        })
         assembled.append(row)
 
     deduplicated = {}

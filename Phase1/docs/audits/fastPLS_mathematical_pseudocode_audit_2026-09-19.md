@@ -1,6 +1,6 @@
 # fastPLS mathematical and pseudocode audit
 
-Date: 2026-09-15
+Date: 2026-09-19
 
 ## Scope
 
@@ -11,9 +11,12 @@ nonlinear kernel PLS, LDA, single and nested cross-validation, prediction,
 evaluation metrics, permutation inference, Pearson correlation, and VIP.
 
 The audited package checkout was commit
-`8ab834154a985bfa94971bcfde0987350e30d08e` plus the explicitly recorded local
-changes listed by `git diff`. The document generator checkout was commit
-`b439f624e6e3057a913cf16f2f25ff34cc21745a` plus its recorded local changes.
+`b518f75285c387632c2443a0c0989d75c9dcda48` plus the explicitly recorded local
+changes whose binary-diff SHA-256 is
+`78cece9e8f6d2039cac95020c303556e377bbae2ee15159fb75ab18c66b73b68`.
+This is the frozen source used by the current CMPB evidence campaign. The
+document generator checkout was commit
+`044e5f2f2ccd7e73c18e56641e73be1bd6c29fe5` plus its recorded current changes.
 
 ## Dimensional conventions
 
@@ -30,9 +33,12 @@ count. The centered cross-covariance is `S0 = X'Y`, of size `p x q`.
 | `D_a` | `a x a` | retained singular values |
 | `W_a` | `a x q` | PLS-SVD latent response map |
 
-The documents now avoid using `C` simultaneously for classes, requested
-component counts, and a PLS-SVD coefficient block. `L_a` denotes the solution of
-`H_a L_a = D_a`, and `W_a = L_a V_a'`.
+The documents reserve `C` for the set of requested component counts and use
+`G` for the number of classes. `L_a` denotes the solution of
+`H_a L_a = D_a`, and `W_a = L_a V_a'`. The cross-validation algorithm uses
+`I_train,h` and `I_hold,h` for row-index sets so that `T_a` remains reserved for
+the PLS score matrix. Algorithms 1 and 2 define `A = max(C)` for the maximal
+fitted path and use `a ∈ C` for a returned prefix.
 
 ## Algorithm findings
 
@@ -78,6 +84,14 @@ When `G = S'S` is cached, `G <- G - h'h` is exact for unit `v`. Compact
 prediction `(Xnew R_a)Q_a'` is algebraically the same as applying
 `B_a = R_a Q_a'` without storing every dense coefficient prefix.
 
+The direct-fit serializer retains the complete requested path when numerical
+rank or response variation yields fewer directions than requested. A requested
+prefix `a` is evaluated with `min(a,e)`, where `e` is the completed direction
+count; positions above `e` repeat the last estimable prediction, coefficient
+path, and LDA score. If `e = 0`, regression uses the training-response mean and
+classification uses the documented class-prior or constant-class fallback.
+The returned requested and effective component counts remain distinct.
+
 Some eligible large routes obtain several candidates from one deflated state
 and consume them sequentially. The second and later candidates were not solved
 from the intervening deflated states. This is therefore an approximate
@@ -111,7 +125,7 @@ pre-allocation guard is part of the public mathematical contract.
 
 The implementation and main manuscript now use the same pooled covariance:
 
-`Sigma = [T'T - sum_c n_c mu_c mu_c'] / max(1, n - C)`.
+`Sigma = [T'T - sum_g n_g mu_g mu_g'] / max(1, n - G)`.
 
 The regularization scale is `s = trace(Sigma)/a`, where `a` is the retained
 score dimension, not response dimension `q`. The code tries
@@ -132,6 +146,16 @@ scaling are calculated from the training fold only. Nonlinear kernels remain
 fold local. Nested validation recreates or derives caches inside each outer
 training partition and does not share response information across an outer
 boundary.
+
+The executable pseudocode states the nested procedure without recursion:
+Steps 2-10 are applied to inner folds formed exclusively within each outer
+training partition, the selected prefix is refitted on that complete outer
+training partition, and only then is its outer holdout predicted.
+
+Constant-response and rank-deficient folds retain every requested component
+position by repeating the last estimable result. Zero-direction folds use the
+training mean for regression or the class-prior/constant-class classification
+fallback. These rules are the same in single CV, nested CV, and direct fitting.
 
 Independent-test `Q2` uses the training-response mean. Cross-validated `Q2`
 uses fold-training means. Training `R2Y` remains distinct from both. Monte Carlo
@@ -163,7 +187,8 @@ divisor cancels.
 ## Pseudocode and document corrections
 
 - CMPB Algorithm 1 matches the implemented one-direction and bounded-block
-  SIMPLS-family paths and explicitly identifies the block approximation.
+  SIMPLS-family paths, explicitly identifies the block approximation, and
+  documents truncated and zero-direction prediction paths.
 - CMPB Algorithm 2 and JSS Algorithm 2 now use distinct score-Gram, solve, and
   latent-map symbols.
 - The main manuscript now gives the exact LDA covariance, regularization, solve,
@@ -171,7 +196,13 @@ divisor cancels.
   algorithm.
 - The stale reference to `Algorithm S3` was replaced by a reference to the
   compiled cross-validation workflow.
-- JSS Algorithms 3-5 match the implemented OPLS, kernel PLS, and CV execution.
+- CMPB Algorithm 3 now reserves `C` for requested component counts, uses
+  explicit training and holdout index sets, and gives a nonrecursive nested-CV
+  procedure.
+- Supplementary Algorithms S1 and S2 match the implemented OPLS and kernel PLS
+  execution, including requested component paths, effective-rank truncation and
+  training-only LDA fitting. JSS Algorithms 3-5 retain the corresponding
+  software-oriented descriptions of OPLS, kernel PLS and CV execution.
 - The vignette now uses retained score dimension `a` in the LDA scale and uses
   the same PLS-SVD notation as the manuscripts.
 - No warm-start direction rule appears in the current documents or public
@@ -189,8 +220,8 @@ divisor cancels.
   CV sufficient statistics, Q2 definitions, evaluation metrics, and VIP scope.
 - The CMPB manuscript, CMPB supplement, and JSS draft were regenerated and
   rendered without clipped algorithm tables.
-- `R CMD check --no-manual --no-build-vignettes` completed with status `OK` on
-  the freshly built `fastPLS_0.3.tar.gz`; both vignette sources executed.
+- `R CMD check --no-manual` completed with status `OK` on the code-identical,
+  vignette-enabled `fastPLS_0.3.tar.gz`; both vignette sources were rebuilt.
 
 ## Scientific wording that must be retained
 

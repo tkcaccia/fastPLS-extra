@@ -26,16 +26,16 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 paths <- c(
     "Deposited PLS-SVD (165)" = deposited_path,
     "PLS-SVD CPU (100)" = file.path(
-        prediction_root, "linux", "nmr_plssvd_cpu_k100_prediction.rds"
+        prediction_root, "plssvd_cpu_prediction.rds"
     ),
     "PLS-SVD CUDA (100)" = file.path(
-        prediction_root, "linux", "nmr_plssvd_cuda_k100_prediction.rds"
+        prediction_root, "plssvd_cuda_prediction.rds"
     ),
-    "SIMPLS family CPU (50)" = file.path(
-        prediction_root, "linux", "nmr_simpls_cpu_k50_prediction.rds"
+    "SIMPLS-family CPU (50)" = file.path(
+        prediction_root, "simpls_cpu_prediction.rds"
     ),
-    "SIMPLS family CUDA (50)" = file.path(
-        prediction_root, "linux", "nmr_simpls_cuda_k50_prediction.rds"
+    "SIMPLS-family CUDA (50)" = file.path(
+        prediction_root, "simpls_cuda_prediction.rds"
     )
 )
 if (any(!file.exists(paths))) {
@@ -43,7 +43,7 @@ if (any(!file.exists(paths))) {
 }
 
 objects <- lapply(paths, readRDS)
-reference <- objects[["SIMPLS family CPU (50)"]]
+reference <- objects[["SIMPLS-family CPU (50)"]]
 observed <- reference$observed
 if (is.null(observed) || !is.matrix(observed)) {
     stop("The reference prediction object does not contain the observed matrix.")
@@ -160,15 +160,15 @@ colours <- c(
     "Deposited PLS-SVD (165)" = "#555555",
     "PLS-SVD CPU (100)" = "#3B6FB6",
     "PLS-SVD CUDA (100)" = "#188977",
-    "SIMPLS family CPU (50)" = "#6C55A3",
-    "SIMPLS family CUDA (50)" = "#D55E00"
+    "SIMPLS-family CPU (50)" = "#6C55A3",
+    "SIMPLS-family CUDA (50)" = "#D55E00"
 )
 line_types <- c(
     "Deposited PLS-SVD (165)" = "solid",
     "PLS-SVD CPU (100)" = "solid",
     "PLS-SVD CUDA (100)" = "dashed",
-    "SIMPLS family CPU (50)" = "solid",
-    "SIMPLS family CUDA (50)" = "dashed"
+    "SIMPLS-family CPU (50)" = "solid",
+    "SIMPLS-family CUDA (50)" = "dashed"
 )
 
 theme_publication <- function() {

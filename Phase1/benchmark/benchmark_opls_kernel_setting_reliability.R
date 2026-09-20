@@ -120,7 +120,6 @@ validate_kernel_setting <- function(case, setting_row) {
     coef0 = coef0,
     scaling = "autoscaling",
     backend = "cpu",
-    svd.method = "irlba",
     fit = TRUE,
     proj = TRUE,
     return_variance = FALSE,
@@ -219,7 +218,7 @@ validate_kernel_setting <- function(case, setting_row) {
     solver = if (min(nrow(case$x_train), ncol(xy$y_train_matrix)) < 6L) {
       "exact_small_dimension_fallback"
     } else {
-      "deterministic_irlba"
+      "rsvd"
     },
     gamma = gamma,
     degree = degree,

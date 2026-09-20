@@ -17,6 +17,20 @@ import subprocess
 import time
 
 
+def memory_limiter(limit_mib):
+    """Return a child-process address-space limiter for resource-heavy runs."""
+    if not limit_mib:
+        return None
+
+    def set_limit():
+        import resource
+
+        limit_bytes = int(limit_mib) * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+
+    return set_limit
+
+
 def sample(pid):
     values = {"timestamp": time.time(), "rss_mib": None, "gpu_mib": None}
     try:
@@ -53,6 +67,15 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--timeout", type=float, default=3600)
     parser.add_argument("--interval", type=float, default=0.05)
+    parser.add_argument(
+        "--memory-limit-mib",
+        type=int,
+        default=0,
+        help=(
+            "Optional address-space limit inherited by the worker. A zero "
+            "value leaves memory unrestricted."
+        ),
+    )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -66,8 +89,14 @@ def main():
     timed_out = False
     samples = []
     with (output / "worker.log").open("w") as log:
-        worker = subprocess.Popen(command, env=env, stdout=log, stderr=log,
-                                  start_new_session=True)
+        worker = subprocess.Popen(
+            command,
+            env=env,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+            preexec_fn=memory_limiter(args.memory_limit_mib),
+        )
         while worker.poll() is None:
             samples.append(sample(worker.pid))
             if time.time() - started > args.timeout:
@@ -113,7 +142,9 @@ def main():
             measured.append(row)
     result = {"command": command, "pid": worker.pid, "exit_code": code,
               "timed_out": timed_out, "elapsed_sec": time.time() - started,
-              "interval_sec": args.interval, "measurements": measured}
+              "interval_sec": args.interval,
+              "memory_limit_mib": args.memory_limit_mib,
+              "measurements": measured}
     (output / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
     raise SystemExit(code if not timed_out else 124)

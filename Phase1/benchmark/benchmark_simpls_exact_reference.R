@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 
-# Exact dense-LAPACK validation of the compiled SIMPLS execution path.
-# This audit-only script keeps exact evidence separate from the public IRLBA
-# and rSVD solver routes.
+# Dense-LAPACK reference validation of the public compiled SIMPLS-family path.
+# The independent R recurrence provides the numerical reference; randomized
+# solver behaviour is also examined separately across repeated seeds.
 
 options(stringsAsFactors = FALSE)
 
@@ -143,19 +143,19 @@ exact_simpls_reference <- function(X, Y, max_ncomp) {
   )
 }
 
-compiled_exact_simpls <- function(X, Y, max_ncomp) {
-  namespace <- asNamespace("fastPLS")
-  engine <- get("pls_model2_fast", envir = namespace, inherits = FALSE)
-  old_t <- Sys.getenv("FASTPLS_RETURN_TTRAIN", unset = NA_character_)
-  old_b <- Sys.getenv("FASTPLS_STORE_B", unset = NA_character_)
-  on.exit({
-    if (is.na(old_t)) Sys.unsetenv("FASTPLS_RETURN_TTRAIN") else Sys.setenv(FASTPLS_RETURN_TTRAIN = old_t)
-    if (is.na(old_b)) Sys.unsetenv("FASTPLS_STORE_B") else Sys.setenv(FASTPLS_STORE_B = old_b)
-  }, add = TRUE)
-  Sys.setenv(FASTPLS_RETURN_TTRAIN = "1", FASTPLS_STORE_B = "always")
-  engine(
-    as.matrix(X), as.matrix(Y), seq_len(max_ncomp), 1L, TRUE,
-    3L, 0L, 0L, 0, 1L
+compiled_current_simpls <- function(X, Y, max_ncomp, seed) {
+  fastPLS::pls(
+    as.matrix(X), as.matrix(Y),
+    ncomp = seq_len(max_ncomp),
+    method = "simpls",
+    scaling = "centering",
+    backend = "cpu",
+    n.cores = 1L,
+    fit = TRUE,
+    proj = TRUE,
+    return_loadings = TRUE,
+    return_variance = FALSE,
+    seed = seed
   )
 }
 
@@ -264,7 +264,9 @@ for (case in cases) {
   message("Exact SIMPLS audit: ", case$case)
   result <- tryCatch({
     reference <- exact_simpls_reference(case$Xtrain, case$Ytrain, case$max_ncomp)
-    compiled <- compiled_exact_simpls(case$Xtrain, case$Ytrain, case$max_ncomp)
+    compiled <- compiled_current_simpls(
+      case$Xtrain, case$Ytrain, case$max_ncomp, case$seed
+    )
     completed <- min(reference$effective, ncol(compiled$R), case$max_ncomp)
     if (completed < 1L) stop("No component completed")
     Xc <- center_columns(case$Xtrain)
@@ -404,11 +406,11 @@ write.csv(case_summary, file.path(out_dir, "simpls_exact_reference_case_summary.
 
 writeLines(c(
   "reference=independent R de Jong SIMPLS updates with base LAPACK svd()",
-  "candidate=compiled fastPLS SIMPLS forced to audit-only dense LAPACK solver",
+  "candidate=current public compiled fastPLS SIMPLS-family path",
   "precision=float64",
   "centering=training-column means",
   "direction=leading left singular vector of the current p-by-q cross-covariance",
-  "evidence_scope=exact-reference numerical validation only; not a public solver benchmark",
+  "evidence_scope=current-release estimator comparison; rSVD seed reliability is audited separately",
   paste0("package_version=", as.character(packageVersion("fastPLS")))
 ), file.path(out_dir, "simpls_exact_reference_parameters.txt"))
 writeLines(capture.output(sessionInfo()), file.path(out_dir, "sessionInfo.txt"))
@@ -416,3 +418,6 @@ writeLines(capture.output(sessionInfo()), file.path(out_dir, "sessionInfo.txt"))
 cat("Exact SIMPLS validation completed:", nrow(raw), "prefix rows and",
     nrow(failure_table), "failures.\n")
 print(case_summary)
+if (nrow(failure_table)) {
+  quit(status = 2L)
+}

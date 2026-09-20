@@ -21,6 +21,32 @@ if (!all(required %in% names(contract))) {
 }
 contract <- contract[contract$dataset != "imagenet", , drop = FALSE]
 dir.create(output_directory, recursive = TRUE, showWarnings = FALSE)
+manifest <- vector("list", nrow(contract))
+
+task_dimensions <- function(task, dataset) {
+    response <- task$Ytrain
+    if (length(task$n_classes) == 1L) {
+        response_count <- as.integer(task$n_classes)
+    } else if (identical(task$task_type, "classification")) {
+        response_count <- length(unique(as.character(response)))
+    } else if (inherits(response, "float32")) {
+        response_count <- ncol(methods::slot(response, "Data"))
+    } else {
+        response_count <- ncol(response)
+        if (is.null(response_count)) {
+            response_count <- 1L
+        }
+    }
+    data.frame(
+        dataset = dataset,
+        task_type = task$task_type,
+        n_train = if (length(task$n_train) == 1L) task$n_train else nrow(task$Xtrain),
+        n_test = if (length(task$n_test) == 1L) task$n_test else nrow(task$Xtest),
+        p = if (length(task$p) == 1L) task$p else ncol(task$Xtrain),
+        q = response_count,
+        stringsAsFactors = FALSE
+    )
+}
 
 for (index in seq_len(nrow(contract))) {
     dataset <- contract$dataset[[index]]
@@ -32,5 +58,13 @@ for (index in seq_len(nrow(contract))) {
              call. = FALSE)
     }
     saveRDS(task, file.path(output_directory, paste0(dataset, "_task.rds")))
+    manifest[[index]] <- task_dimensions(task, dataset)
     message("Prepared ", dataset)
 }
+
+manifest <- Filter(Negate(is.null), manifest)
+write.csv(
+    do.call(rbind, manifest),
+    file.path(output_directory, "prepared_task_manifest.csv"),
+    row.names = FALSE
+)

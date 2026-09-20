@@ -36,7 +36,8 @@ if (!identical(loaded_version, expected_version)) {
         call. = FALSE
     )
 }
-linked_blas <- fastPLS_blas()
+blas_information <- fastPLS_blas()
+linked_blas <- blas_information$backend
 if (!identical(linked_blas, "OpenBLAS")) {
     stop(
         "Figure 1 publication benchmark requires an OpenBLAS-linked fastPLS build; detected ",
@@ -145,6 +146,9 @@ row <- data.frame(
     package_path = find.package("fastPLS"),
     platform = R.version$platform,
     blas = blas,
+    blas_version = blas_information$version,
+    blas_configuration = blas_information$configuration,
+    blas_core = blas_information$core,
     blas_path = blas_path,
     dataset = dataset,
     task_type = task$task_type,

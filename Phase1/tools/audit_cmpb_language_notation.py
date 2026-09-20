@@ -11,7 +11,6 @@ from docx import Document
 FORBIDDEN_LITERAL = (
     "PLSSVD",
     "RSVD",
-    "nested validation",
     "five-fold validation",
     "five-fold cross-validation",
     "ten-fold validation",
@@ -25,7 +24,17 @@ FORBIDDEN_LITERAL = (
     "Predictive k",
     "n/p/q/k",
     "SIMPLS-rSVD",
+    "SIMPLS family",
     "PLS-SVD/rSVD",
+    "kernel-PLS",
+    "candidate component set A",
+    "Steps 1-11",
+    "define T as all row indices",
+    "n - C",
+    "IRLBA",
+    "warm-start",
+    "Current-release",
+    "current-release",
 )
 
 
@@ -50,17 +59,41 @@ def audit(path):
         if re.search(r"\bk-\s*1\b", text) and "k-nearest" not in text:
             findings.append(f"{location}: component expression uses k-1: {text}")
 
-    if "main" in path.name or "supplement" in path.name:
+    is_supplement = "supplement" in path.name.lower()
+    is_cmpb_document = "cmpb" in path.name.lower()
+    old_versions = sorted(set(re.findall(r"\b0\.99\.\d+\b", all_text)))
+    if old_versions:
+        findings.append(
+            "obsolete package version labels remain: " + ", ".join(old_versions)
+        )
+    release_mentions = re.findall(
+        r"fastPLS(?:\s+version)?\s+0\.3\b", all_text, flags=re.IGNORECASE
+    )
+    if is_cmpb_document and not is_supplement and release_mentions:
+        findings.append("the package version must not appear in the main manuscript")
+    if is_cmpb_document and is_supplement and len(release_mentions) != 1:
+        findings.append(
+            "the supplement must identify fastPLS 0.3 exactly once in its "
+            "reproducibility section"
+        )
+    if is_cmpb_document:
         if "PLS-SVD" not in all_text:
             findings.append("document does not contain PLS-SVD")
         if "rSVD" not in all_text:
             findings.append("document does not contain rSVD")
-        if "A denotes" not in all_text and "A is the retained" not in all_text and \
-                "A is the maximum retained" not in all_text:
-            findings.append("document does not define retained component count A")
-        if re.search(r"\\bK\\b", all_text) and \
-                "K denotes" not in all_text and "K is the number" not in all_text:
-            findings.append("document does not define fold count K")
+    if is_cmpb_document:
+        required_phrases = {
+            "requested component-count set C": "requested component set C",
+            "A = max(C)": "maximum retained component count A",
+        }
+        if not is_supplement:
+            required_phrases.update({
+                "G classes": "class count G",
+                "K-fold map": "fold count K",
+            })
+        for phrase, description in required_phrases.items():
+            if phrase not in all_text:
+                findings.append(f"document does not define {description}")
 
     return findings
 

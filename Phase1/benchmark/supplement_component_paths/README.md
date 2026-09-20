@@ -59,6 +59,8 @@ line because classification heads do not apply.
   monitored fresh process on the selected CPU and accelerator routes.
 - `plot_nmr_component_selection.R`: writes Figure S12 from held-out test RMSD,
   fitting-plus-prediction time, incremental peak host RSS and the independently
-  computed training-only component selections.
+  computed training-only one-standard-error selections for PLS-SVD and the
+  SIMPLS-family estimator. OPLS and kernel PLS paths are descriptive and do not
+  receive a selection line.
 - `validate_nmr_prefix_scoring.R`: verifies the response-blocked NMR scoring
   path against public `predict()` for all four PLS families.

@@ -12,7 +12,7 @@ library_path <- normalizePath(args[[1L]], mustWork = TRUE)
 task_path <- normalizePath(args[[2L]], mustWork = TRUE)
 platform <- match.arg(args[[3L]], c("linux", "mac"))
 output_dir <- args[[4L]]
-expected_version <- Sys.getenv("FASTPLS_EXPECTED_VERSION", unset = "0.99.66")
+expected_version <- Sys.getenv("FASTPLS_EXPECTED_VERSION", unset = "0.3")
 
 .libPaths(unique(c(library_path, .libPaths())))
 suppressPackageStartupMessages(library(fastPLS))

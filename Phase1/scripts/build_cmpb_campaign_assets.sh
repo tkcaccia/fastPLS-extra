@@ -12,9 +12,14 @@ fi
 phase1_root="$(cd "$1" && pwd)"
 campaign_root="$(cd "$2" && pwd)"
 results="${campaign_root}/results"
-assets="${campaign_root}/assets"
+published_assets="${campaign_root}/assets"
+assets="${campaign_root}/.assets_build.$$"
 tables="${assets}/tables"
 figures="${assets}/figures"
+cleanup_staging() {
+    rm -rf "${assets}"
+}
+trap cleanup_staging EXIT
 mkdir -p "${tables}" "${figures}"
 export R_LIBS_USER="${campaign_root}/library${R_LIBS_USER:+:${R_LIBS_USER}}"
 
@@ -60,12 +65,16 @@ Rscript --vanilla \
 cp "${figures}/figure2_build/figure2_backend_and_cv.png" "${figures}/Figure2.png"
 cp "${figures}/figure2_build/figure2_backend_and_cv.pdf" "${figures}/Figure2.pdf"
 
-FASTPLS_COMPONENT_PATH_SCOPE=cmpb Rscript --vanilla \
+FASTPLS_COMPONENT_PATH_SCOPE=cmpb \
+FASTPLS_COMPONENT_CONTRACT="${phase1_root}/benchmark/gpu_cross_validation/selected_component_contract.csv" \
+Rscript --vanilla \
     "${phase1_root}/benchmark/summarize_current_component_paths.R" \
     "${results}/component_paths/standard/component_path_raw.csv" \
-    "${phase1_root}/benchmark/gpu_cross_validation/selected_component_contract.csv" \
+    "${results}/component_selection/ordinary/selected_components.csv" \
     "${assets}/component_paths"
 while read -r number dataset; do
+    cp "${assets}/component_paths/component_path_plots/component_path_${dataset}.png" \
+        "${figures}/FigureS${number}.png"
     cp "${assets}/component_paths/component_path_plots/component_path_${dataset}.pdf" \
         "${figures}/FigureS${number}.pdf"
 done <<'EOF'
@@ -86,10 +95,13 @@ cp "${assets}/component_paths/"*.csv "${tables}/"
 Rscript --vanilla \
     "${phase1_root}/benchmark/supplement_component_paths/plot_nmr_component_selection.R" \
     "${results}/component_paths/nmr_cpu_cuda.csv" \
-    "${phase1_root}/benchmark/gpu_cross_validation/selected_component_contract.csv" \
+    "${results}/component_selection/nmr_plssvd/nmr_component_selection_decision.csv" \
+    "${results}/component_selection/nmr_simpls/nmr_component_selection_decision.csv" \
     "${assets}/nmr_component_path"
 cp "${assets}/nmr_component_path/figureS12_nmr_test_component_path.pdf" \
     "${figures}/FigureS12.pdf"
+cp "${assets}/nmr_component_path/figureS12_nmr_test_component_path.png" \
+    "${figures}/FigureS12.png"
 cp "${assets}/nmr_component_path/"*.csv "${tables}/"
 cp "${results}/component_selection/ordinary/selected_components.csv" \
     "${tables}/training_selected_components.csv"
@@ -117,6 +129,8 @@ Rscript --vanilla "${phase1_root}/benchmark/plot_imagenet_current.R" \
 Rscript --vanilla "${phase1_root}/tools/build_supplement_cuda_ikpls_figure.R" \
     "${results}/supplement/cuda_software/cuda_software_comparison_summary.csv" \
     "${figures}/FigureS13.png" "${figures}/FigureS13.pdf"
+cp "${results}/supplement/cuda_software/cuda_software_comparison_summary.csv" \
+    "${tables}/cuda_software_comparison_summary.csv"
 
 Rscript --vanilla "${phase1_root}/benchmark/analyze_nmr_localized_error.R" \
     "${results}/figure3" \
@@ -124,12 +138,33 @@ Rscript --vanilla "${phase1_root}/benchmark/analyze_nmr_localized_error.R" \
     "${assets}/nmr_localized_error"
 cp "${assets}/nmr_localized_error/figureS14_nmr_localized_error.pdf" \
     "${figures}/FigureS14.pdf"
+cp "${assets}/nmr_localized_error/figureS14_nmr_localized_error.png" \
+    "${figures}/FigureS14.png"
 cp "${assets}/nmr_localized_error/"*.csv "${tables}/"
 
 find "${results}/validation" -type f -name '*.csv' -exec cp {} "${tables}/" \;
+python3 "${phase1_root}/scripts/summarize_cmpb_narrative.py" \
+    "${assets}" "${assets}/cmpb_narrative_summary.json"
+python3 "${phase1_root}/scripts/audit_cmpb_assets.py" "${assets}"
 printf 'asset\tsha256\n' >"${assets}/asset_manifest.tsv"
-find "${figures}" "${tables}" -type f -print0 | sort -z | while IFS= read -r -d '' path; do
+find "${figures}" "${tables}" "${assets}/cmpb_narrative_summary.json" \
+    "${assets}/asset_audit.json" \
+    -type f -print0 | sort -z | while IFS= read -r -d '' path; do
     printf '%s\t%s\n' "${path#${assets}/}" "$(sha256sum "${path}" | awk '{print $1}')"
 done >>"${assets}/asset_manifest.tsv"
 
-echo "Built current-release CMPB assets under ${assets}"
+backup="${campaign_root}/.assets_previous.$$"
+if [ -e "${published_assets}" ]; then
+    mv "${published_assets}" "${backup}"
+fi
+if mv "${assets}" "${published_assets}"; then
+    rm -rf "${backup}"
+    trap - EXIT
+else
+    if [ -e "${backup}" ]; then
+        mv "${backup}" "${published_assets}"
+    fi
+    exit 1
+fi
+
+echo "Built current-release CMPB assets under ${published_assets}"

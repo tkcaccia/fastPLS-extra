@@ -41,11 +41,11 @@ if (!all(required %in% names(results))) {
 route_specification <- data.frame(
     implementation = c(
         "PLS-SVD\nCPU (100)", "PLS-SVD\nCUDA (100)",
-        "SIMPLS family\nCPU (50)", "SIMPLS family\nCUDA (50)"
+        "SIMPLS-family\nCPU (50)", "SIMPLS-family\nCUDA (50)"
     ),
     family = c(rep("plssvd", 2L), rep("simpls", 2L)),
     backend = rep(c("cpu", "cuda"), 2L),
-    platform = rep("Linux workstation", 4L),
+    platform = rep("linux_nvidia", 4L),
     ncomp = c(rep(100L, 2L), rep(50L, 2L)),
     stringsAsFactors = FALSE
 )
@@ -118,7 +118,7 @@ deposited_summary <- data.frame(
     implementation = "Deposited PLS-SVD\nIRLBA (165)",
     family = "plssvd",
     backend = "cpu",
-    platform = "Linux workstation",
+    platform = "linux_nvidia",
     precision = "float64",
     ncomp = 165L,
     package_version = paste(unique(deposited$analysis_package_version), collapse = ";"),
@@ -150,8 +150,8 @@ colours <- c(
     "Deposited PLS-SVD\nIRLBA (165)" = "#555555",
     "PLS-SVD\nCPU (100)" = "#3B6FB6",
     "PLS-SVD\nCUDA (100)" = "#188977",
-    "SIMPLS family\nCPU (50)" = "#6C55A3",
-    "SIMPLS family\nCUDA (50)" = "#20A486"
+    "SIMPLS-family\nCPU (50)" = "#6C55A3",
+    "SIMPLS-family\nCUDA (50)" = "#20A486"
 )
 theme_publication <- function(size = 9) {
     theme_minimal(base_size = size, base_family = "Helvetica") +
@@ -242,10 +242,10 @@ panel_c <- ggplot(memory, aes(implementation, memory, fill = type)) +
         legend.position = "top"
     )
 
-prediction_file <- function(platform, family, backend, ncomp) {
+prediction_file <- function(family, backend, ncomp) {
     path <- file.path(
-        prediction_root, platform,
-        paste0("nmr_", family, "_", backend, "_k", ncomp, "_prediction.rds")
+        prediction_root,
+        paste0(family, "_", backend, "_prediction.rds")
     )
     if (!file.exists(path)) stop("Missing prediction evidence: ", path)
     path
@@ -255,10 +255,10 @@ prediction_paths <- c(
         deposited_root,
         "deposited_plssvd_cpu_irlba_k165_rep1_prediction.rds"
     ),
-    "PLS-SVD\nCPU (100)" = prediction_file("linux", "plssvd", "cpu", 100L),
-    "PLS-SVD\nCUDA (100)" = prediction_file("linux", "plssvd", "cuda", 100L),
-    "SIMPLS family\nCPU (50)" = prediction_file("linux", "simpls", "cpu", 50L),
-    "SIMPLS family\nCUDA (50)" = prediction_file("linux", "simpls", "cuda", 50L)
+    "PLS-SVD\nCPU (100)" = prediction_file("plssvd", "cpu", 100L),
+    "PLS-SVD\nCUDA (100)" = prediction_file("plssvd", "cuda", 100L),
+    "SIMPLS-family\nCPU (50)" = prediction_file("simpls", "cpu", 50L),
+    "SIMPLS-family\nCUDA (50)" = prediction_file("simpls", "cuda", 50L)
 )
 predictions <- lapply(prediction_paths, readRDS)
 for (name in names(predictions)) {
@@ -286,7 +286,7 @@ panel_d <- ggplot(per_sample, aes(implementation, RMSD, fill = implementation)) 
     theme_publication(8) +
     theme(axis.text.x = element_text(angle = 28, hjust = 1, size = 7))
 
-representative <- predictions[["SIMPLS family\nCPU (50)"]]
+representative <- predictions[["SIMPLS-family\nCPU (50)"]]
 sample_index <- which.min(abs(
     representative$per_sample_rmsd - median(representative$per_sample_rmsd)
 ))
@@ -328,7 +328,7 @@ figure <- ((panel_a | panel_b) / (panel_c | panel_d) / (panel_e | panel_f)) +
     plot_annotation(
         title = "NMR prediction and deposited PLS-SVD/IRLBA reference",
         subtitle = paste0(
-            "PLS-SVD: 100 components; SIMPLS family: 50 components; ",
+            "PLS-SVD: 100 components; SIMPLS-family: 50 components; ",
             "deposited reference: 165 components; three isolated processes per route"
         ),
         theme = theme(

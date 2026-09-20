@@ -18,8 +18,7 @@ source(file.path(repo_dir, "benchmark", "helpers_dataset_memory_compare.R"))
 worker <- file.path(
     repo_dir,
     "benchmark",
-    "metal_validation",
-    "metal_worker.R"
+    "component_path_worker.R"
 )
 
 out_dir <- if (length(args)) {
@@ -69,6 +68,14 @@ component_precision <- tolower(Sys.getenv(
     "FASTPLS_COMPONENT_PRECISION",
     "float32"
 ))
+timeout_seconds <- as.integer(Sys.getenv("FASTPLS_BENCHMARK_TIMEOUT", "1800"))
+if (!is.finite(timeout_seconds) || timeout_seconds < 1L) {
+    stop("FASTPLS_BENCHMARK_TIMEOUT must be positive.", call. = FALSE)
+}
+timeout_command <- Sys.which("timeout")
+if (!nzchar(timeout_command)) {
+    stop("The component-path runner requires the coreutils timeout command.")
+}
 if (!component_precision %in% c("float32", "float64")) {
     stop(
         "FASTPLS_COMPONENT_PRECISION must be 'float32' or 'float64'.",
@@ -349,8 +356,11 @@ for (index in seq_along(configs)) {
             cfg$run_id
         ))
         status <- system2(
-            "/usr/bin/time",
+            timeout_command,
             c(
+                "--signal=TERM",
+                paste0(timeout_seconds, "s"),
+                "/usr/bin/time",
                 time_flag,
                 file.path(R.home("bin"), "Rscript"),
                 worker,
@@ -392,8 +402,12 @@ for (index in seq_along(configs)) {
         row$backend_reported <- cfg$backend
     }
     row$peak_rss_mb <- parse_peak_rss(time_path)
+    finite_scalar <- function(value) {
+        length(value) == 1L && is.finite(value)
+    }
     row$incremental_peak_rss_mb <- if (
-        is.finite(row$peak_rss_mb) && is.finite(row$baseline_rss_mb)
+        finite_scalar(row$peak_rss_mb) &&
+            finite_scalar(row$baseline_rss_mb)
     ) {
         max(0, row$peak_rss_mb - row$baseline_rss_mb)
     } else {

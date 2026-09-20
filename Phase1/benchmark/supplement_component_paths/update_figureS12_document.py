@@ -53,7 +53,7 @@ def main():
         "separate held-out analysis. Each family, route and component count was fitted "
         "on all 1,200 training spectra and evaluated against the fixed 321-spectrum "
         "test partition in three isolated processes using float32 inputs, rSVD seed "
-        "123 and fastPLS 0.99.66. Complete fitting-plus-prediction time and "
+        "123 and fastPLS 0.3. Complete fitting-plus-prediction time and "
         "baseline-corrected peak host RSS were monitored over the same interval. Mac "
         "CPU and Metal were measured on the Apple workstation; Linux CPU and CUDA "
         "were measured on the NVIDIA workstation. Test responses were not used for "
@@ -65,7 +65,8 @@ def main():
     replace_picture(paragraph_before(caption), Path(args.figure))
     caption.text = (
         "Figure S12. NMR component-dependent prediction and computation using "
-        "float32 inputs in fastPLS 0.99.66. PLS-SVD, SIMPLS, OPLS and linear kernel "
+        "float32 inputs in fastPLS 0.3. PLS-SVD, SIMPLS-family, OPLS and linear "
+        "kernel "
         "PLS were fitted only on the predefined 1,200-spectrum training partition "
         "and evaluated on the fixed 321-spectrum test partition. Rows report held-out "
         "RMSD, complete fitting-plus-prediction time and baseline-corrected peak host "

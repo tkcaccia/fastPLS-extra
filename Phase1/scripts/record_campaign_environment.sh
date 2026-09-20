@@ -34,18 +34,39 @@ write.csv(
     data.frame(package = required, installed = installed, version = versions),
     file.path(out, "r_package_versions.csv"), row.names = FALSE, na = ""
 )
-if (!all(installed)) {
+require_independent <- identical(
+    tolower(Sys.getenv("FASTPLS_REQUIRE_INDEPENDENT_PACKAGES", "true")),
+    "true"
+)
+independent <- setdiff(required, c("fastPLS", "float"))
+if (!all(installed[c("fastPLS", "float")])) {
+    stop(
+        "Missing required campaign packages: ",
+        paste(required[!installed & required %in% c("fastPLS", "float")],
+              collapse = ", "), call. = FALSE
+    )
+}
+if (require_independent && !all(installed[independent])) {
     stop(
         "Missing independent-comparison packages: ",
-        paste(required[!installed], collapse = ", "), call. = FALSE
+        paste(independent[!installed[independent]], collapse = ", "),
+        call. = FALSE
     )
 }
 suppressPackageStartupMessages(library(fastPLS))
+blas <- fastPLS_blas()
 write.csv(data.frame(
-    field = c("R_version", "platform", "fastPLS_version", "cpu_library"),
+    field = c(
+        "R_version", "platform", "fastPLS_version", "cpu_library",
+        "cpu_library_version", "cpu_library_configuration",
+        "cpu_library_core", "cpu_library_parallel", "cpu_library_threads",
+        "cpu_library_path"
+    ),
     value = c(
         R.version.string, R.version$platform,
-        as.character(utils::packageVersion("fastPLS")), fastPLS_blas()
+        as.character(utils::packageVersion("fastPLS")),
+        blas$backend, blas$version, blas$configuration, blas$core,
+        blas$parallel, blas$threads, blas$library
     )
 ), file.path(out, "r_runtime.csv"), row.names = FALSE)
 writeLines(capture.output(sessionInfo()), file.path(out, "sessionInfo.txt"))

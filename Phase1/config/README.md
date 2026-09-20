@@ -11,7 +11,7 @@ under version control because they are inputs to independent benchmark tools.
 
 `independent_method_contract.csv` and `measurement_contract.csv` define the
 software adapters and measurement rules used to regenerate Supplementary
-Tables S2 and S3. Package versions are joined from the frozen campaign during
+Tables S3 and S4. Package versions are joined from the frozen campaign during
 asset assembly rather than stored in these contracts.
 
 `cmpb_selection_grids.csv` is the executable version of the candidate grids

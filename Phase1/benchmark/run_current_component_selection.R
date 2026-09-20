@@ -29,18 +29,40 @@ out_dir <- if (length(args)) args[[1L]] else {
 }
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-dataset_caps <- c(
-  cbmc_citeseq = 100L,
-  ccle = 100L,
-  cifar100 = 300L,
-  gtex_v8 = 200L,
-  metref = 200L,
-  prism = 100L,
-  retina = 50L,
-  tabula = 50L,
-  tcga_brca = 100L,
-  tcga_hnsc_methylation = 42L,
-  tcga_pan_cancer = 200L
+ordinary_datasets <- c(
+  "cbmc_citeseq", "ccle", "cifar100", "gtex_v8", "metref", "prism",
+  "retina", "tabula", "tcga_brca", "tcga_hnsc_methylation",
+  "tcga_pan_cancer"
+)
+grid_contract_path <- normalizePath(
+  Sys.getenv(
+    "FASTPLS_COMPONENT_GRID_CONTRACT",
+    file.path(repo_dir, "config", "cmpb_selection_grids.csv")
+  ),
+  mustWork = TRUE
+)
+grid_contract <- read.csv(
+  grid_contract_path, stringsAsFactors = FALSE, check.names = FALSE
+)
+if (!all(c("dataset", "components") %in% names(grid_contract))) {
+  stop("The component-grid contract must contain dataset and components.")
+}
+parse_grid <- function(value) {
+  grid <- sort(unique(as.integer(strsplit(value, ",", fixed = TRUE)[[1L]])))
+  if (!length(grid) || anyNA(grid) || any(grid < 1L)) {
+    stop("Every candidate grid must contain positive integer components.")
+  }
+  grid
+}
+grid_by_dataset <- setNames(
+  lapply(grid_contract$components, parse_grid), grid_contract$dataset
+)
+missing_grids <- setdiff(ordinary_datasets, names(grid_by_dataset))
+if (length(missing_grids)) {
+  stop("Missing component grids for: ", paste(missing_grids, collapse = ", "))
+}
+dataset_caps <- vapply(
+  grid_by_dataset[ordinary_datasets], max, integer(1L)
 )
 families <- c("plssvd", "simpls", "opls", "kernelpls")
 classification_heads <- c("argmax", "lda")
@@ -53,6 +75,14 @@ if (!is.finite(n.cores) || n.cores < 1L) {
 component_precision <- tolower(Sys.getenv(
   "FASTPLS_COMPONENT_PRECISION", "native"
 ))
+timeout_seconds <- as.integer(Sys.getenv("FASTPLS_BENCHMARK_TIMEOUT", "1800"))
+if (!is.finite(timeout_seconds) || timeout_seconds < 1L) {
+  stop("FASTPLS_BENCHMARK_TIMEOUT must be positive.", call. = FALSE)
+}
+timeout_command <- Sys.which("timeout")
+if (!nzchar(timeout_command)) {
+  stop("The component-selection runner requires coreutils timeout.")
+}
 if (!component_precision %in% c("native", "float32", "float64")) {
   stop(
     "FASTPLS_COMPONENT_PRECISION must be native, float32, or float64.",
@@ -112,8 +142,9 @@ make_config <- function(dataset, family, classifier) {
     }
     family_limit <- min(family_limit, response_limit)
   }
-  grid_max <- min(unname(dataset_caps[[dataset]]), family_limit)
-  if (grid_max < 1L) {
+  grid <- grid_by_dataset[[dataset]]
+  grid <- grid[grid <= family_limit]
+  if (!length(grid)) {
     stop("No valid component count for ", dataset, "/", family, call. = FALSE)
   }
   list(
@@ -122,7 +153,7 @@ make_config <- function(dataset, family, classifier) {
     family = family,
     classifier = classifier,
     task_path = task_path(dataset),
-    grid = seq_len(grid_max),
+    grid = grid,
     intrinsic_limit = as.integer(family_limit),
     kfold = kfold,
     seed = seed,
@@ -156,9 +187,12 @@ for (index in seq_along(configs)) {
   if (!file.exists(result_path)) {
     saveRDS(config, config_path)
     cat(sprintf("[%d/%d] %s\n", index, length(configs), config$run_id))
-    system2(
-      "/usr/bin/time",
+    status <- system2(
+      timeout_command,
       c(
+        "--signal=TERM",
+        paste0(timeout_seconds, "s"),
+        "/usr/bin/time",
         time_flag,
         file.path(R.home("bin"), "Rscript"),
         worker,
@@ -168,6 +202,12 @@ for (index in seq_along(configs)) {
       stdout = stdout_path,
       stderr = time_path
     )
+    if (!identical(status, 0L) && !file.exists(result_path)) {
+      stop(
+        "Component-selection worker failed for ", config$run_id,
+        " with exit status ", status, call. = FALSE
+      )
+    }
     unlink(config_path)
   } else {
     cat(sprintf("[%d/%d] %s [reused]\n", index, length(configs), config$run_id))
@@ -223,6 +263,7 @@ writeLines(
     paste("created:", format(Sys.time(), tz = "UTC", usetz = TRUE)),
     paste("fastPLS:", as.character(packageVersion("fastPLS"))),
     paste("task_root:", task_root),
+    paste("component_grid_contract:", grid_contract_path),
     paste("kfold:", kfold),
     paste("seed:", seed),
     paste("n.cores:", n.cores),
@@ -232,6 +273,7 @@ writeLines(
     "classification_heads: argmax and lda",
     "classification_selection: maximum training-only CV accuracy across component count and classifier",
     "regression_metric: RMSD",
+    "tie_rule: the lowest component count, and then the first classifier in the declared order, is retained",
     capture.output(sessionInfo())
   ),
   file.path(out_dir, "session_info.txt")

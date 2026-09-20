@@ -48,7 +48,8 @@ as_double_matrix <- function(x) {
   }
   as.matrix(x)
 }
-component_value <- function(x, ncomp, index, effective_ncomp = ncomp) {
+component_value <- function(x, ncomp, index, effective_ncomp = ncomp,
+                            path_length = 1L) {
   keys <- unique(paste0("ncomp=", c(ncomp, effective_ncomp)))
   if (is.list(x) && !is.data.frame(x)) {
     if (!is.null(names(x))) {
@@ -68,8 +69,25 @@ component_value <- function(x, ncomp, index, effective_ncomp = ncomp) {
     return(x[[matched[[1L]]]])
   }
   dims <- dim(x)
-  if (length(dims) == 3L) return(x[, , 1L, drop = TRUE])
-  if (length(dims) == 2L && ncol(x) == 1L) return(x[, 1L])
+  if (length(dims) == 3L) {
+    if (index > dims[[3L]]) {
+      stop("Prediction array is shorter than the requested component path")
+    }
+    return(x[, , index, drop = TRUE])
+  }
+  if (length(dims) == 2L) {
+    if (!is.null(colnames(x))) {
+      matched <- keys[keys %in% colnames(x)]
+      if (length(matched)) return(x[, matched[[1L]], drop = TRUE])
+    }
+    if (ncol(x) == 1L) return(x[, 1L])
+    if (ncol(x) == path_length) {
+      if (index > ncol(x)) {
+        stop("Prediction matrix is shorter than the requested component path")
+      }
+      return(x[, index, drop = TRUE])
+    }
+  }
   x
 }
 api_classification_metrics <- function(prediction, index) {
@@ -398,12 +416,29 @@ tryCatch({
     NA_real_
   }
 
-  effective <- as.integer(internal$ncomp)
+  effective <- as.integer(fit$effective_ncomp)
+  if (!length(effective)) {
+    effective <- as.integer(internal$ncomp)
+  }
+  if (length(effective) != length(ncomp_grid)) {
+    stop(
+      "The fitted effective-component path is not aligned with the requested ",
+      "ImageNet component grid"
+    )
+  }
+  if (any(!is.finite(effective)) || any(effective < 1L) ||
+      any(effective > ncomp_grid)) {
+    stop("The fitted effective-component path is invalid")
+  }
   for (i in seq_along(ncomp_grid)) {
     k <- ncomp_grid[[i]]
-    effective_k <- if (length(effective) >= i) effective[[i]] else k
-    predicted <- component_value(pred$Ypred, k, i, effective_k)
-    top_labels <- component_value(pred$Ypred_top, k, i, effective_k)
+    effective_k <- effective[[i]]
+    predicted <- component_value(
+      pred$Ypred, k, i, effective_k, length(ncomp_grid)
+    )
+    top_labels <- component_value(
+      pred$Ypred_top, k, i, effective_k, length(ncomp_grid)
+    )
     metrics <- api_classification_metrics(pred, i)
     audit_api_metrics(task$Ytest, predicted, top_labels, metrics)
     rows[[i]]$ncomp_effective <- effective_k

@@ -42,5 +42,5 @@ for cores in 1 4; do
         --resume
 done
 
-Rscript -e 'library(fastPLS, lib.loc=Sys.getenv("FASTPLS_MULTICORE_LIB")); cat(paste0("package_version=", packageVersion("fastPLS"), "\nblas=", fastPLS_blas(), "\n"))' \
+Rscript -e 'library(fastPLS, lib.loc=Sys.getenv("FASTPLS_MULTICORE_LIB")); cat(paste0("package_version=", packageVersion("fastPLS"), "\nblas=", fastPLS_blas(details = FALSE), "\n"))' \
     > "${FASTPLS_MULTICORE_OUT}/numerical_library.txt"
