@@ -392,7 +392,7 @@ run_selected_backends() {
         --library "${PACKAGE_LIB}" --task-dir "${TASK_ROOT}" \
         --selected "${SELECTED}" \
         --output "${RESULTS_ROOT}/figure2/selected_cpu_cuda.csv" \
-        --backends cpu cuda --precision float32 --classifiers argmax \
+        --backends cpu cuda --precision float32 --classifiers lda \
         --repetitions 3 --timeout-sec "${TIMEOUT_SEC}" \
         --source-id "${SOURCE_ID}" --expected-version "${EXPECTED_VERSION}"
 }

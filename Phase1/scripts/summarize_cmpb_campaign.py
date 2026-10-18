@@ -56,6 +56,11 @@ def selected_ratios(raw_path: Path) -> list[dict]:
             "requested_ncomp": exemplar.get(
                 "requested_ncomp", exemplar.get("ncomp", "")
             ),
+            "classifier": (
+                exemplar.get("classifier", "").strip().lower()
+                if exemplar.get("metric_name", "").lower() == "accuracy"
+                else "regression"
+            ),
             "status": "success" if success else "/".join(
                 sorted({row.get("status", "failed") for row in rows})
             ),
@@ -82,6 +87,7 @@ def selected_ratios(raw_path: Path) -> list[dict]:
             "family": family,
             "accelerator": "CUDA",
             "requested_ncomp": (cpu or cuda or {}).get("requested_ncomp", ""),
+            "classifier": (cpu or cuda or {}).get("classifier", ""),
             "status_cpu": cpu["status"] if cpu else "not_evaluated",
             "status_accelerator": cuda["status"] if cuda else "not_evaluated",
             "median_total_sec_cpu": cpu_time,

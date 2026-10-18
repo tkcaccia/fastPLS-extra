@@ -31,7 +31,7 @@ EXPECTED_COMPONENT_CONTRACT = {
     "tcga_brca": (3, 3, 3, 3, 3),
     "tcga_hnsc_methylation": (2, 2, 2, 2, 2),
     "tcga_pan_cancer": (31, 100, 100, 100, 100),
-    "cbmc_citeseq": (31, 44, 44, 44, 44),
+    "cbmc_citeseq": (10, 44, 44, 44, 44),
     "prism": (6, 6, 6, 6, 6),
     "nmr": (100, 50, 50, 50, 50),
     "imagenet": (1000, 1000, 1000, 1000, 1000),
@@ -582,6 +582,15 @@ def main() -> None:
         f"expected 312 CPU/CUDA rows, found {len(selected_backend_rows)}",
         failures,
     )
+    require(
+        all(
+            row.get("classifier", "").lower() == "lda"
+            for row in selected_backend_rows
+            if row.get("dataset") in CLASSIFICATION_DATASETS
+        ),
+        "Figure 2A-B classification routes must use LDA",
+        failures,
+    )
     coverage = {
         (row.get("dataset"), row.get("family"), row.get("backend"))
         for row in selected_backend_rows
@@ -634,7 +643,7 @@ def main() -> None:
     require(
         all(
             integer(row.get("effective_ncomp", "0"))
-            == (999 if row.get("family") == "plssvd" else 1000)
+            == 1000
             for row in imagenet_success
         ),
         (
@@ -731,6 +740,27 @@ def main() -> None:
             if row.get("dataset") in CLASSIFICATION_DATASETS
         ),
         "a classification CV timing route did not use LDA",
+        failures,
+    )
+    cuda_opls_cv = [
+        row for row in successful_cv
+        if row.get("backend") == "cuda" and row.get("method") == "opls"
+        and row.get("workload") == "cv"
+    ]
+    require(
+        len(cuda_opls_cv) == 61,
+        "expected 61 successful CUDA OPLS cross-validation rows",
+        failures,
+    )
+    require(
+        all(
+            row.get("execution_route", "").startswith("resident_cuda_opls_")
+            for row in cuda_opls_cv
+        ),
+        (
+            "CUDA OPLS cross-validation evidence does not use the resident "
+            "route introduced by the current implementation"
+        ),
         failures,
     )
     cv_fold_signatures: dict[tuple[str, str, str], set[str]] = {}

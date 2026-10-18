@@ -90,19 +90,21 @@ TABLE_SPECS = {
         "old_caption": "Table S4. Fitting and prediction time",
         "caption": (
             "Table S5. Median fitting-and-prediction time and predictive metric "
-            "for the selected float32 CPU/CUDA comparisons. CPU/CUDA ratios above "
+            "for the selected float32 CPU/CUDA comparisons. Classification uses "
+            "LDA; regression uses continuous prediction. CPU/CUDA ratios above "
             "one favour CUDA."
         ),
         "columns": [
             ("dataset", "Dataset"), ("family", "Family"),
-            ("components", "A"), ("cpu_time_seconds", "CPU s"),
+            ("components", "A"), ("prediction_head", "Prediction"),
+            ("cpu_time_seconds", "CPU s"),
             ("cuda_time_seconds", "CUDA s"),
             ("cpu_cuda_time_ratio", "CPU/CUDA"),
             ("metric", "Metric"), ("cpu_metric", "CPU metric"),
             ("cuda_metric", "CUDA metric"), ("status", "Status"),
         ],
-        "widths": (0.90, 0.72, 0.35, 0.55, 0.55, 0.63, 0.55, 0.65, 0.68, 0.62),
-        "font": 5.8,
+        "widths": (0.82, 0.64, 0.30, 0.52, 0.48, 0.48, 0.56, 0.48, 0.58, 0.60, 0.54),
+        "font": 5.5,
         "cell_margin": 24,
         "paragraph_after": 0.4,
     },
@@ -111,12 +113,13 @@ TABLE_SPECS = {
         "old_caption": "Table S5. Host-memory increase",
         "caption": (
             "Table S6. Median process-memory measurements for the selected "
-            "float32 CPU/CUDA comparisons. Host values are baseline and "
+            "float32 CPU/CUDA comparisons. Classification uses LDA; regression "
+            "uses continuous prediction. Host values are baseline and "
             "baseline-corrected peak RSS; device memory is reported separately."
         ),
         "columns": [
             ("dataset", "Dataset"), ("family", "Family"),
-            ("components", "A"),
+            ("components", "A"), ("prediction_head", "Prediction"),
             ("cpu_baseline_rss_mib", "CPU base MiB"),
             ("cuda_baseline_rss_mib", "CUDA base MiB"),
             ("cpu_incremental_peak_rss_mib", "CPU incr. MiB"),
@@ -125,8 +128,8 @@ TABLE_SPECS = {
             ("cuda_device_peak_mib", "Device MiB"),
             ("status", "Status"),
         ],
-        "widths": (0.88, 0.70, 0.34, 0.62, 0.65, 0.65, 0.68, 0.70, 0.62, 0.56),
-        "font": 5.7,
+        "widths": (0.80, 0.62, 0.30, 0.50, 0.55, 0.58, 0.58, 0.60, 0.62, 0.56, 0.50),
+        "font": 5.4,
         "cell_margin": 24,
         "paragraph_after": 0.4,
     },
@@ -612,9 +615,18 @@ def add_component_grid_text(document, tables: Path) -> None:
         "the following evaluated training-only grids: " + grid_text + ". "
         "For NMR, five paired 80/20 training-only splits used the smallest "
         "component count whose mean validation RMSD was within one standard "
-        "error of the minimum; " + decisions + "."
+        "error of the minimum; " + decisions + ". Figure S12 separately "
+        "highlights the retained benchmark counts of 100 components for "
+        "PLS-SVD and 50 for the SIMPLS-family estimator. The 100-component "
+        "PLS-SVD point had the lowest held-out RMSD within the displayed "
+        "PLS-SVD test path and is not presented as a training-only selection."
     )
-    if any(p.text.startswith("Component-selection grids.") for p in document.paragraphs):
+    existing = [
+        p for p in document.paragraphs
+        if p.text.startswith("Component-selection grids.")
+    ]
+    if existing:
+        replace_caption(existing[0], text)
         return
     figure_caption = paragraph_starting(document, "Figure S1.")
     picture = figure_caption._p.getprevious()
@@ -706,20 +718,21 @@ def normalize_main_prose_and_references(document) -> None:
                 "time divided by CUDA time for fitting and fixed-test "
                 "prediction; values above 1 favour CUDA. B: CUDA host-RSS "
                 "increment divided by the CPU increment; values below 1 favour "
-                "CUDA. Panels A and B use argmax for classification. C and D: "
+                "CUDA. Classification uses LDA in all panels. C and D: "
                 "complete 10-fold cross-validation time divided by one "
                 "full-training fit plus fixed-test prediction on Linux CPU and "
                 "CUDA, respectively. Classification uses LDA in both the "
                 "numerator and denominator, and the LDA head is refitted in "
                 "each training fold; regression uses continuous predictions. "
                 "Panels C and D retain the dataset-specific component counts, "
-                "folds, rSVD controls and seeds. Five fresh processes were used "
-                "except for ImageNet, which used one. TO denotes the 1,800-s "
-                "execution limit. Timings include initialization, transfers and "
-                "synchronization. Host-RSS increments include numerical "
-                "libraries, allocator pools, staging buffers and model "
-                "workspaces; CUDA device allocation is reported separately in "
-                "Supplementary Tables S5-S6."
+                "folds, rSVD controls and seeds. Panels A and B report medians "
+                "from three fresh processes. Panels C and D use five fresh "
+                "processes except for ImageNet, which uses one. TO denotes the "
+                "1,800-s execution limit. Timings include initialization, "
+                "transfers and synchronization. Host-RSS increments include "
+                "numerical libraries, allocator pools, staging buffers and "
+                "model workspaces; CUDA device allocation is reported separately "
+                "in Supplementary Tables S5-S6."
             )
         if text.startswith("Figure 3. NMR spectral prediction"):
             text = (
@@ -1165,21 +1178,24 @@ def rewrite_quantitative_narrative(document, facts: dict) -> None:
         by_dataset.setdefault(row["dataset"], []).append(
             finite(row["runtime_ratio"])
         )
-    accelerated_datasets = sorted({row["dataset"] for row in faster})
-    ranges = "; ".join(
-        f"{dataset.replace('_', ' ')} {min(by_dataset[dataset]):.2f}-"
-        f"{max(by_dataset[dataset]):.2f}-fold"
-        for dataset in accelerated_datasets
-    )
+    def ratio_range(dataset):
+        values = by_dataset[dataset]
+        return f"{min(values):.2f}-{max(values):.2f}-fold"
+
     replace_started(
         document,
         "We tested CUDA backend in all",
-        f"CUDA was evaluated in all {len(paired)} paired calculations, but was "
-        "faster only when the workload was large enough to offset device "
-        "initialization, transfer and synchronization (Figure 2A). It reduced "
-        f"runtime in {len(faster)} pairs. The observed CPU/CUDA ranges among "
-        f"datasets with at least one accelerated route were {ranges}. Routes "
-        "below one remained CPU-favourable.",
+        "CUDA acceleration depended strongly on workload size (Figure 2A). "
+        "All classification routes used LDA. For most small and medium datasets, "
+        "initialization, transfer and synchronization outweighed GPU computation, "
+        "and the CPU was faster. Clear gains emerged for the largest workloads: "
+        f"CUDA was {ratio_range('imagenet')} faster on ImageNet and "
+        f"{ratio_range('nmr')} faster on NMR across the four PLS families. "
+        f"The gains were smaller on CIFAR-100 ({ratio_range('cifar100')}) and "
+        "mixed on PRISM, where SIMPLS-family, OPLS and kernel PLS were "
+        "3.17-3.78-fold faster on CUDA but PLS-SVD remained CPU-favourable. "
+        f"Overall, CUDA reduced runtime in {len(faster)} of the {len(paired)} "
+        "paired calculations. Ratios below one indicate that the CPU was faster.",
     )
 
     cv_routes = figure2["cross_validation_routes"]
@@ -1247,10 +1263,13 @@ def rewrite_quantitative_narrative(document, facts: dict) -> None:
         f"{figure2['paired_routes']} paired calculations, with a median "
         f"CUDA/CPU ratio of {figure2['median_cuda_cpu_host_memory_ratio']:.2f}. "
         "On small tasks, context creation, numerical libraries, allocator pools "
-        "and staging buffers dominated this increment. On the largest tasks, "
-        "substantial storage moved from host memory to the CUDA device. These "
-        "measurements describe complete runtime residency rather than isolated "
-        "algorithmic workspace (Supplementary Tables S5-S6).",
+        "and staging buffers dominated this increment. Host RSS decreased for "
+        "SIMPLS-family, OPLS and kernel PLS on ImageNet and for OPLS on NMR, "
+        "where substantial storage moved to the device; PLS-SVD did not show "
+        "the same reduction. Device allocations reached approximately 4.1 GiB "
+        "on ImageNet and 1.9 GiB for NMR OPLS. These measurements describe "
+        "complete runtime residency rather than isolated algorithmic workspace "
+        "(Figure 2B and Supplementary Tables S5-S6).",
     )
 
     selections = facts["component_selection"]
@@ -1481,10 +1500,12 @@ def replace_supplement_figures(document, figures: Path) -> None:
                 "all 1,200 training spectra and evaluated on the fixed 321 "
                 "test spectra. Rows show held-out RMSD, fitting and prediction "
                 "time, and baseline-corrected peak host RSS; columns show the "
-                "four PLS families. Dotted lines mark the training-only "
-                "one-standard-error selections of 75 components for PLS-SVD "
-                "and 50 for the SIMPLS-family estimator. OPLS and kernel PLS "
-                "paths are shown "
+                "four PLS families. Dotted lines mark the retained benchmark "
+                "counts of 100 components for PLS-SVD and 50 for the "
+                "SIMPLS-family estimator. The 100-component PLS-SVD point had "
+                "the lowest held-out RMSD within the displayed PLS-SVD grid. "
+                "The separate training-only one-standard-error selection was "
+                "75 components. OPLS and kernel PLS paths are shown "
                 "without implying an independently selected component count."
             )
 

@@ -1,11 +1,14 @@
 #!/usr/bin/env Rscript
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 4L) {
+if (length(args) != 5L) {
     stop(
         paste(
             "Usage: plot_nmr_component_selection.R",
-            "BACKEND_COMPONENT_RAW PLSSVD_DECISION SIMPLS_DECISION OUTPUT_DIR"
+            paste(
+                "BACKEND_COMPONENT_RAW PLSSVD_DECISION SIMPLS_DECISION",
+                "COMPONENT_CONTRACT OUTPUT_DIR"
+            )
         ),
         call. = FALSE
     )
@@ -36,7 +39,23 @@ decision <- rbindlist(list(
 if (nrow(decision) != 2L || any(!is.finite(decision$selected_ncomp))) {
     stop("The NMR one-standard-error decisions are incomplete.")
 }
-output_dir <- normalizePath(args[[4L]], mustWork = FALSE)
+contract <- fread(normalizePath(args[[4L]], mustWork = TRUE))
+nmr_contract <- contract[dataset == "nmr"]
+if (nrow(nmr_contract) != 1L) {
+    stop("The component contract must contain one NMR row.")
+}
+figure_counts <- data.table(
+    family = c("plssvd", "simpls"),
+    selected_ncomp = as.integer(c(
+        nmr_contract$plssvd_ncomp,
+        nmr_contract$simpls_ncomp
+    )),
+    basis = "retained benchmark component count"
+)
+if (any(!is.finite(figure_counts$selected_ncomp))) {
+    stop("The retained NMR component counts are incomplete.")
+}
+output_dir <- normalizePath(args[[5L]], mustWork = FALSE)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 required_columns <- c(
@@ -61,6 +80,9 @@ family_labels <- c(
 decision[, selected_ncomp := as.integer(selected_ncomp)]
 raw[, family_label := factor(family_labels[family], levels = family_levels)]
 decision[, family_label := factor(family_labels[family], levels = family_levels)]
+figure_counts[, family_label := factor(
+    family_labels[family], levels = family_levels
+)]
 
 architecture_labels <- c(
     "linux_nvidia.cpu" = "Linux CPU",
@@ -98,6 +120,10 @@ summary[, measure := factor(
 
 fwrite(summary, file.path(output_dir, "nmr_test_component_path_summary.csv"))
 fwrite(decision, file.path(output_dir, "nmr_training_selected_components.csv"))
+fwrite(
+    figure_counts,
+    file.path(output_dir, "nmr_figure_component_counts.csv")
+)
 
 architecture_colours <- c("Linux CPU" = "#009E73", "CUDA" = "#CC79A7")
 architecture_shapes <- c("Linux CPU" = 23, "CUDA" = 24)
@@ -112,7 +138,7 @@ figure <- ggplot(
     geom_line(linewidth = 0.65) +
     geom_point(size = 2.0, stroke = 0.6, colour = "black") +
     geom_vline(
-        data = decision,
+        data = figure_counts,
         aes(xintercept = selected_ncomp),
         inherit.aes = FALSE,
         colour = "#444444",

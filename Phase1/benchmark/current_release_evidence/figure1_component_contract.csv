@@ -8,7 +8,7 @@ tabula,classification,31,31,31,31,31,yes
 tcga_brca,classification,3,3,3,3,3,yes
 tcga_hnsc_methylation,classification,2,2,2,2,2,yes
 tcga_pan_cancer,classification,31,100,100,100,100,yes
-cbmc_citeseq,regression,31,44,44,44,44,yes
+cbmc_citeseq,regression,10,44,44,44,44,yes
 prism,regression,6,6,6,6,6,yes
 nmr,regression,100,50,50,50,50,yes
 imagenet,classification,1000,1000,1000,1000,1000,yes

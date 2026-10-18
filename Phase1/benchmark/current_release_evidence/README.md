@@ -38,7 +38,8 @@ other three families. All raw outputs must remain outside the Git checkout.
 Publication Figure 2 uses float32 inputs for all 13 tasks in
 `figure1_component_contract.csv`, including NMR and ImageNet. Run CPU and CUDA
 within one Chiamaka campaign and CPU and Metal within one Mac campaign so every
-ratio is paired on the same machine. `run_selected_backends.py` checkpoints the
+ratio is paired on the same machine. Classification uses LDA on both CPU and
+CUDA; regression uses continuous prediction. `run_selected_backends.py` checkpoints the
 aggregate CSV after each isolated worker, supports `--resume`, records explicit
 timeouts, and rejects an execution route or precision that differs from the
 request. After both campaigns finish, render the figure without rerunning fits:

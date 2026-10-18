@@ -242,9 +242,26 @@ def numerical_validation_table(campaign: Path, output: Path) -> None:
     write_csv(output / "TableS1_numerical_validation.csv", rows)
 
 
-def selected_tables(source: Path, output: Path) -> None:
+def selected_tables(
+    source: Path, component_contract: Path, output: Path
+) -> None:
     """Summarize replicate-level selected points into paired CPU/CUDA rows."""
     raw = read_csv(source)
+    invalid_classification = [
+        row for row in raw
+        if row.get("metric_name", "").lower() == "accuracy"
+        and row.get("classifier", "").lower() != "lda"
+    ]
+    if invalid_classification:
+        raise RuntimeError(
+            "Figure 2 classification rows must use LDA; found "
+            f"{len(invalid_classification)} non-LDA rows"
+        )
+    contract = {
+        (row["dataset"], family): row[f"{family}_ncomp"]
+        for row in read_csv(component_contract)
+        for family in ("plssvd", "simpls", "opls", "kernelpls")
+    }
     groups: dict[tuple[str, str, str], list[dict[str, str]]] = {}
     pair_order: list[tuple[str, str]] = []
     seen_pairs: set[tuple[str, str]] = set()
@@ -285,14 +302,30 @@ def selected_tables(source: Path, output: Path) -> None:
             None if cpu_time is None or cuda_time in (None, 0)
             else cpu_time / cuda_time
         )
-        ncomp = (cpu or cuda)[0].get("requested_ncomp", "")
+        ncomp = contract.get((dataset, family), "")
+        measured_counts = {
+            value
+            for row in cpu + cuda
+            for field in ("requested_ncomp", "effective_ncomp")
+            if (value := row.get(field, ""))
+        }
+        if not ncomp or ncomp not in measured_counts:
+            raise RuntimeError(
+                "Component contract is not represented by the measured run for "
+                f"{dataset}/{family}: contract={ncomp!r}, "
+                f"measured={sorted(measured_counts)!r}"
+            )
         precision = (cpu or cuda)[0].get("precision", "")
         metric_name = (cpu or cuda)[0].get("metric_name", "")
+        prediction_head = (
+            "LDA" if metric_name.lower() == "accuracy" else "continuous"
+        )
         time_rows.append({
             "dataset": dataset,
             "family": family,
             "components": ncomp,
             "precision": precision,
+            "prediction_head": prediction_head,
             "metric": metric_name,
             "cpu_time_seconds": show(cpu_time),
             "cuda_time_seconds": show(cuda_time),
@@ -322,6 +355,7 @@ def selected_tables(source: Path, output: Path) -> None:
             "family": family,
             "components": ncomp,
             "precision": precision,
+            "prediction_head": prediction_head,
             "cpu_baseline_rss_mib": show(cpu_baseline),
             "cuda_baseline_rss_mib": show(cuda_baseline),
             "cpu_incremental_peak_rss_mib": show(cpu_increment),
@@ -526,7 +560,9 @@ def main() -> None:
     formal_table(phase1, campaign, output)
     independent_contracts(phase1, campaign, output)
     selected_tables(
-        campaign / "results/figure2/selected_cpu_cuda.csv", output
+        campaign / "results/figure2/selected_cpu_cuda.csv",
+        phase1 / "config/cmpb_component_contract.csv",
+        output,
     )
     component_selection_evidence(phase1, campaign, output)
     imagenet_table(campaign, output)

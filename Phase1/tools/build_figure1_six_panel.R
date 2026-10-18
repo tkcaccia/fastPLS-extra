@@ -130,21 +130,21 @@ format_rmsd <- function(value) {
 }
 
 publication_theme <- function(show_method_labels = TRUE) {
-    theme_minimal(base_size = 8.3) +
+    theme_minimal(base_size = 9.3) +
         theme(
             axis.title = element_blank(),
             axis.text.x = element_text(
-                face = "bold", size = 6.0, angle = 45, hjust = 1
+                face = "bold", size = 7.0, angle = 45, hjust = 1
             ),
             axis.text.y = if (show_method_labels) {
-                element_text(size = 6.8)
+                element_text(size = 7.6)
             } else {
                 element_blank()
             },
             axis.ticks.y = element_blank(),
             panel.grid = element_blank(),
-            plot.title = element_text(face = "bold", size = 10),
-            plot.subtitle = element_text(size = 7.2),
+            plot.title = element_text(face = "bold", size = 10.5),
+            plot.subtitle = element_text(size = 8.0),
             legend.position = "right",
             legend.key.height = unit(0.25, "in"),
             plot.margin = margin(4, 5, 4, 5)
@@ -163,7 +163,7 @@ heat_panel <- function(data, field, title, subtitle, colours, formatter,
     )
     ggplot(data, aes(dataset, implementation, fill = plot_value)) +
         geom_tile(colour = "white", linewidth = 0.35) +
-        geom_text(aes(label = cell_label), size = 2.15, colour = "grey10") +
+        geom_text(aes(label = cell_label), size = 2.45, colour = "grey10") +
         scale_fill_gradientn(
             colours = colours, trans = transform, limits = limits,
             oob = squish, na.value = "grey88", name = NULL
@@ -247,7 +247,7 @@ figure <- wrap_plots(top_row, time_row, memory_row, ncol = 1L) +
     )
 
 dir.create(dirname(args[[2L]]), recursive = TRUE, showWarnings = FALSE)
-ggsave(args[[2L]], figure, width = 11.2, height = 7.3, units = "in",
+ggsave(args[[2L]], figure, width = 8.0, height = 8.3, units = "in",
        dpi = 300, bg = "white")
-ggsave(args[[3L]], figure, width = 11.2, height = 7.3, units = "in",
+ggsave(args[[3L]], figure, width = 8.0, height = 8.3, units = "in",
        device = cairo_pdf, bg = "white")

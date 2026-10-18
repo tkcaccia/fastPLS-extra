@@ -154,6 +154,13 @@ cv_panel <- function(data, backend, title, show_y = TRUE) {
 }
 
 ratios <- read.csv(ratio_path, stringsAsFactors = FALSE)
+if (!"classifier" %in% names(ratios)) {
+    stop("CPU/CUDA ratios must record the prediction head.", call. = FALSE)
+}
+if (any(!ratios$classifier %in% c("lda", "regression"))) {
+    stop("Figure 2A-B require LDA classification and continuous regression.",
+        call. = FALSE)
+}
 ratios <- ratios[
     ratios$accelerator == "CUDA" &
         ratios$platform == "Intel/NVIDIA workstation",
@@ -188,7 +195,7 @@ figure <- wrap_plots(panels, ncol = 2, guides = "keep") +
         title = "Float32 CPU and CUDA execution across PLS workflows",
         subtitle = paste0(
             "Matched Intel Core i7-13700 and NVIDIA RTX 5060 Ti runs\n",
-            "Panels A-B use argmax; panels C-D retain LDA scores; ",
+            "Classification uses LDA in all panels; ",
             "* denotes incomplete repetitions"
         ),
         theme = theme(

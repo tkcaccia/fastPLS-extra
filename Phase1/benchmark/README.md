@@ -21,7 +21,7 @@ manuscript items to code is in [`../MANIFEST.csv`](../MANIFEST.csv).
   assembles the figure.
 - **Figure 2A-B:** `current_release_evidence/run_selected_backends.py` and
   `current_release_evidence/build_figure2_float32.R` generate the matched
-  Linux CPU/CUDA comparison.
+  Linux CPU/CUDA comparison with LDA classification and continuous regression.
 - **Figure 2C-D:** `gpu_cross_validation/` runs and audits the matched ten-fold
   LDA cross-validation comparison. The selected component contract is stored
   in that directory.

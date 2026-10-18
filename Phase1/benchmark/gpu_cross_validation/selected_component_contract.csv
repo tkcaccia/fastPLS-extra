@@ -35,7 +35,7 @@ tcga_pan_cancer,classification,plssvd,31,200,success
 tcga_pan_cancer,classification,simpls,100,200,success
 tcga_pan_cancer,classification,opls,100,200,success
 tcga_pan_cancer,classification,kernelpls,100,200,success
-cbmc_citeseq,regression,plssvd,31,100,success
+cbmc_citeseq,regression,plssvd,10,100,success
 cbmc_citeseq,regression,simpls,44,100,success
 cbmc_citeseq,regression,opls,44,100,success
 cbmc_citeseq,regression,kernelpls,44,100,success

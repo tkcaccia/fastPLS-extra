@@ -97,6 +97,7 @@ Rscript --vanilla \
     "${results}/component_paths/nmr_cpu_cuda.csv" \
     "${results}/component_selection/nmr_plssvd/nmr_component_selection_decision.csv" \
     "${results}/component_selection/nmr_simpls/nmr_component_selection_decision.csv" \
+    "${phase1_root}/config/cmpb_component_contract.csv" \
     "${assets}/nmr_component_path"
 cp "${assets}/nmr_component_path/figureS12_nmr_test_component_path.pdf" \
     "${figures}/FigureS12.pdf"
